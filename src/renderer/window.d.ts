@@ -1,0 +1,24 @@
+import type { DeviceEvent } from '../shared/types';
+import type { VideoOpenPayload } from '../shared/ipcChannels';
+
+declare global {
+  interface Window {
+    onlycat: {
+      // token-dialog
+      submitToken?: (token: string) => void;
+      onConnectError?: (cb: (message: string) => void) => void;
+      // activity-window
+      loadMore?: (beforeGlobalId?: number) => void;
+      openVideo?: (deviceId: string, eventId: number) => void;
+      onEventsList?: (cb: (events: DeviceEvent[]) => void) => void;
+      onEventsLoadMoreResult?: (cb: (events: DeviceEvent[]) => void) => void;
+      onEventPrepend?: (cb: (event: DeviceEvent) => void) => void;
+      // video-window
+      signalReady?: () => void;
+      requestRetry?: (deviceId: string, eventId: number) => void;
+      onVideoOpen?: (cb: (payload: VideoOpenPayload) => void) => void;
+      onEventData?: (cb: (event: DeviceEvent) => void) => void;
+      onEventUpdate?: (cb: (event: DeviceEvent) => void) => void;
+    };
+  }
+}

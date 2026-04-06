@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; media-src 'self' https://gateway.onlycat.com blob:; script-src 'self'" />
+  <title>OnlyCat — Event Video</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <span id="event-label">Loading event...</span>
+  </header>
+  <main>
+    <video id="video-player" controls autoplay playsinline></video>
+    <p id="not-available" hidden>Video not yet available. Retrying...</p>
+  </main>
+  <script type="module" src="renderer.js"></script>
+</body>
+</html>

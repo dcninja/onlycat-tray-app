@@ -1,0 +1,78 @@
+{
+  "name": "onlycat-tray-app",
+  "version": "1.0.0",
+  "description": "OnlyCat system tray desktop application",
+  "main": "dist/main/main/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.preload.json && tsc -p tsconfig.renderer.json && npm run copy-assets",
+    "copy-assets": "node scripts/copy-assets.js",
+    "build:main": "tsc -p tsconfig.main.json",
+    "build:renderer": "tsc -p tsconfig.renderer.json",
+    "start": "electron . --no-sandbox",
+    "test": "jest --run",
+    "test:watch": "jest",
+    "dist": "npm run build && electron-builder",
+    "dist:linux": "npm run build && electron-builder --linux",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:win": "npm run build && electron-builder --win"
+  },
+  "dependencies": {
+    "electron": "^41.1.1",
+    "socket.io-client": "^4.7.5"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.14.0",
+    "electron-builder": "^26.8.1",
+    "electron-mock-ipc": "^0.3.12",
+    "fast-check": "^3.19.0",
+    "jest": "^29.7.0",
+    "sharp": "^0.34.5",
+    "ts-jest": "^29.1.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/*.test.ts"
+    ],
+    "moduleNameMapper": {
+      "electron": "<rootDir>/src/__mocks__/electron.ts"
+    }
+  },
+  "build": {
+    "appId": "com.onlycat.tray-app",
+    "productName": "OnlyCat",
+    "publish": {
+      "provider": "github",
+      "owner": "dcninja",
+      "repo": "onlycat-tray-app"
+    },
+    "files": [
+      "dist/**/*",
+      "assets/**/*",
+      "src/renderer/**/*.html",
+      "src/renderer/**/*.css"
+    ],
+    "linux": {
+      "target": ["deb", "AppImage"],
+      "category": "Utility",
+      "icon": "assets/icon.png"
+    },
+    "mac": {
+      "target": ["dmg", "zip"],
+      "icon": "assets/icon.png",
+      "category": "public.app-category.utilities"
+    },
+    "win": {
+      "target": ["nsis"],
+      "icon": "assets/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  }
+}

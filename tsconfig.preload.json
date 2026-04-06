@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./dist/renderer",
+    "rootDir": "./src"
+  },
+  "include": [
+    "src/renderer/token-dialog/preload.ts",
+    "src/renderer/activity-window/preload.ts",
+    "src/renderer/video-window/preload.ts",
+    "src/shared/**/*"
+  ],
+  "exclude": [
+    "**/*.test.ts"
+  ]
+}

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'" />
+  <title>OnlyCat — Sign In</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="container">
+    <h1>OnlyCat</h1>
+    <p class="subtitle">Enter your device token to connect</p>
+    <form id="token-form">
+      <input
+        id="token-input"
+        type="password"
+        placeholder="Device token"
+        autocomplete="off"
+        required
+      />
+      <p id="error-msg" class="error" hidden></p>
+      <button type="submit" id="submit-btn">Connect</button>
+    </form>
+  </div>
+  <script type="module" src="renderer.js"></script>
+</body>
+</html>

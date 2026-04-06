@@ -1,0 +1,26 @@
+appId: com.onlycat.tray-app
+productName: OnlyCat
+
+directories:
+  output: release
+
+files:
+  - dist/**/*
+  - package.json
+
+linux:
+  target:
+    - target: deb
+      arch: [x64]
+  category: Utility
+  icon: assets/icon.png
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: assets/icon.ico
+
+nsis:
+  oneClick: true
+  perMachine: false

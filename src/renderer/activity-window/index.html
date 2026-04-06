@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; img-src 'self' https://gateway.onlycat.com" />
+  <title>OnlyCat — Recent Activity</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <h1>Recent Activity</h1>
+    <div class="tabs">
+      <button class="tab active" data-tab="video">Video Movement Events</button>
+      <button class="tab" data-tab="all">All Events</button>
+    </div>
+    <div class="search-bar">
+      <input id="search-input" type="text" placeholder="Search by cat name..." autocomplete="off" />
+    </div>
+  </header>
+  <main>
+    <ul id="event-list"></ul>
+    <div id="load-more-container">
+      <button id="load-more-btn">Load More</button>
+    </div>
+    <p id="empty-msg" hidden>No events yet.</p>
+  </main>
+  <script type="module" src="renderer.js"></script>
+</body>
+</html>
