@@ -3,8 +3,19 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import type { DeviceEvent } from '../shared/types';
+import { classificationLabel } from '../shared/eventLabels';
 
 type OnEventClick = (event: DeviceEvent) => void;
+
+function classificationEmoji(classification?: number): string {
+  switch (classification) {
+    case 1: return '🟢';
+    case 2: return '🔵';
+    case 3: return '🔴';
+    case 0: return '⚪';
+    default: return '';
+  }
+}
 
 async function downloadToTemp(url: string): Promise<string | undefined> {
   return new Promise((resolve) => {
@@ -44,12 +55,17 @@ class NotificationManager {
     }
 
     const time = event.createdAt
-      ? new Date(event.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      ? new Date(event.createdAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
       : '';
 
-    const title = `OnlyCat — ${deviceName}`;
+    const emoji = classificationEmoji(event.eventClassification);
+    const clsLabel = classificationLabel(event.eventClassification);
+    const title = emoji
+      ? `OnlyCat — ${deviceName}  ${emoji} ${clsLabel}`
+      : `OnlyCat — ${deviceName}`;
     const who = catName ? `${catName} was detected` : 'Motion detected';
-    const body = time ? `${who} at ${time}` : who;
+    const timePart = time ? ` at ${time}` : '';
+    const body = `${who}${timePart}`;
 
     // Download thumbnail to temp file for notification icon
     let iconPath: string | undefined;

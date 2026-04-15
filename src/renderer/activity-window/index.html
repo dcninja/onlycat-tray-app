@@ -17,6 +17,20 @@
     <div class="search-bar">
       <input id="search-input" type="text" placeholder="Search by cat name..." autocomplete="off" />
     </div>
+    <div class="filters">
+      <label class="filter-label">
+        <input type="checkbox" class="filter-check" data-classification="1" checked /> Entry Allowed
+      </label>
+      <label class="filter-label">
+        <input type="checkbox" class="filter-check" data-classification="2" checked /> Exit Allowed
+      </label>
+      <label class="filter-label">
+        <input type="checkbox" class="filter-check" data-classification="3" checked /> Contraband Detected
+      </label>
+      <label class="filter-label">
+        <input type="checkbox" class="filter-check" data-classification="0" checked /> No Activity
+      </label>
+    </div>
   </header>
   <main>
     <ul id="event-list"></ul>

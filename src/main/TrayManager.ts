@@ -1,5 +1,6 @@
 import { Tray, Menu, nativeImage, MenuItemConstructorOptions } from 'electron';
 import * as path from 'path';
+import * as fs from 'fs';
 import type { Device, DeviceEvent, ConnectionState } from '../shared/types';
 
 type OnActivityClick = () => void;
@@ -42,7 +43,7 @@ class TrayManager {
     this.notifyOnVideoOnly = callbacks.notifyOnVideoOnly;
 
     // Use the cat icon from assets
-    const iconPath = path.join(__dirname, '../../../assets/icon.png');
+    const iconPath = path.join(__dirname, '../../../assets/icon-256.png');
     const icon = nativeImage.createFromPath(iconPath);
     this.tray = new Tray(icon);
     this.tray.setToolTip('OnlyCat');
@@ -53,6 +54,8 @@ class TrayManager {
     this.updateAvailableVersion = version;
     this.rebuild();
   }
+
+  private missedCount: number = 0;
 
   setNotifyOnVideoOnly(value: boolean): void {
     this.notifyOnVideoOnly = value;
@@ -70,6 +73,11 @@ class TrayManager {
   }
 
   setUnacknowledgedEvent(event: DeviceEvent | null): void {
+    if (event) {
+      this.missedCount++;
+    } else {
+      this.missedCount = 0;
+    }
     this.unacknowledgedEvent = event;
     this.rebuild();
   }
@@ -146,6 +154,48 @@ class TrayManager {
     const menu = Menu.buildFromTemplate(this.buildMenuTemplate());
     this.tray.setContextMenu(menu);
     this.tray.setToolTip(this.buildTooltip());
+    this.updateIcon();
+  }
+
+  private updateIcon(): void {
+    if (!this.tray) return;
+    const iconPath = path.join(__dirname, '../../../assets/icon-256.png');
+
+    if (this.missedCount <= 0) {
+      this.tray.setImage(nativeImage.createFromPath(iconPath));
+      return;
+    }
+
+    // Generate badged icon using SVG overlay
+    try {
+      const sharp = require('sharp');
+      const count = this.missedCount > 99 ? '99+' : String(this.missedCount);
+      const fontSize = count.length > 1 ? 52 : 60;
+      const badgeSize = 96;
+      const badgeSvg = `
+        <svg width="${badgeSize}" height="${badgeSize}" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="${badgeSize/2}" cy="${badgeSize/2}" r="${badgeSize/2}" fill="#ef5350"/>
+          <text x="50%" y="50%" dominant-baseline="central" text-anchor="middle"
+            font-family="Arial, sans-serif" font-size="${fontSize}" font-weight="bold" fill="white">${count}</text>
+        </svg>`;
+
+      sharp(iconPath)
+        .resize(256, 256)
+        .composite([{
+          input: Buffer.from(badgeSvg),
+          top: 256 - badgeSize,
+          left: 256 - badgeSize,
+        }])
+        .png()
+        .toBuffer()
+        .then((buf: Buffer) => {
+          if (this.tray) this.tray.setImage(nativeImage.createFromBuffer(buf));
+        })
+        .catch(() => {});
+    } catch {
+      // sharp not available — fall back to plain icon
+      this.tray.setImage(nativeImage.createFromPath(iconPath));
+    }
   }
 
   private buildTooltip(): string {

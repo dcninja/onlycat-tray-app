@@ -1,4 +1,4 @@
-import { app, ipcMain } from 'electron';
+import { app, ipcMain, Notification } from 'electron';
 import tokenStore from './TokenStore';
 import gatewayClient from './GatewayClient';
 import trayManager from './TrayManager';
@@ -6,34 +6,55 @@ import windowManager from './WindowManager';
 import notificationManager from './NotificationManager';
 import settingsStore from './SettingsStore';
 import { checkForUpdates, openReleasePage } from './UpdateChecker';
+import { classificationLabel, triggerSourceLabel } from '../shared/eventLabels';
 import { IPC_CHANNELS } from '../shared/ipcChannels';
 import type { AuthSubmitTokenPayload, EventsLoadMorePayload } from '../shared/ipcChannels';
 import type { Device, DeviceEvent } from '../shared/types';
 
+// Set app name before ready so OS notifications show "OnlyCat" not "Electron"
+app.setName('OnlyCat');
+
+// Fix taskbar WM class on Linux
+if (process.platform === 'linux') {
+  app.commandLine.appendSwitch('class', 'OnlyCat');
+}
+
 const GATEWAY_URL = 'https://gateway.onlycat.com';
 
 let devices: Device[] = [];
+let cachedEvents: DeviceEvent[] = [];
+let eventsCached = false;
 let disconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let currentVideoEvent: { deviceId: string; eventId: number } | null = null;
 let updateInfo: { latestVersion: string; releaseUrl: string } | null = null;
 
-// Map API enums to human-readable labels
-function triggerSourceLabel(source?: number): string {
-  switch (source) {
-    case 1: return 'RFID Only';
-    case 2: return 'Motion Only';
-    case 3: return 'Motion + RFID';
-    default: return 'Unknown';
-  }
-}
+// Fetch all event pages and cache them
+async function fetchAllEvents(): Promise<void> {
+  const allEvents: DeviceEvent[] = [];
+  let beforeGlobalId: number | undefined;
 
-function classificationLabel(classification?: number): string {
-  switch (classification) {
-    case 0: return 'Unclassified';
-    case 1: return 'Confirmed';
-    case 2: return 'Possible';
-    default: return '';
+  while (true) {
+    const payload = beforeGlobalId
+      ? { beforeGlobalId }
+      : { subscribe: true };
+
+    const page = await gatewayClient.request('getEvents', payload) as DeviceEvent[];
+    if (!page?.length) break;
+
+    const enriched = await Promise.all(page.map(async (e) => {
+      const normalized = normalizeEvent(e, devices);
+      const catName = await getCatName(normalized);
+      return catName ? { ...normalized, catName } : normalized;
+    }));
+
+    allEvents.push(...enriched);
+    beforeGlobalId = page[page.length - 1].globalId;
+
+    if (page.length < 20) break;
   }
+
+  cachedEvents = allEvents;
+  eventsCached = true;
 }
 
 // Build normalized event with derived URLs and device name
@@ -60,12 +81,60 @@ function normalizeEvent(raw: DeviceEvent, deviceList: Device[]): DeviceEvent {
   return { ...raw, deviceName, createdAt, videoUrl, thumbnailUrl, type };
 }
 
+// Helper to get cat names from all rfid codes — cache first, API on miss
+async function getCatName(event: DeviceEvent): Promise<string | undefined> {
+  if (!event.rfidCodes?.length) return undefined;
+
+  const names: string[] = [];
+  for (const rfidCode of event.rfidCodes) {
+    let name = settingsStore.getCatName(rfidCode);
+    if (!name) {
+      try {
+        const profile = await gatewayClient.request('getRfidProfile', {
+          rfidCode,
+          deviceId: event.deviceId,
+        }) as { label?: string };
+        name = profile?.label ?? undefined;
+        if (name) settingsStore.setCatName(rfidCode, name);
+      } catch {
+        // skip
+      }
+    }
+    if (name && !names.includes(name)) names.push(name);
+  }
+
+  return names.length ? names.join(' & ') : undefined;
+}
+
+async function fetchAndSendEvent(deviceId: string, eventId: number): Promise<void> {
+  await new Promise(r => setTimeout(r, 500));
+  const videoWin = windowManager.getVideoWindow();
+  if (!videoWin) return;
+
+  try {
+    const event = await gatewayClient.request('getEvent', { deviceId, eventId, subscribe: true }) as DeviceEvent;
+    const normalized = normalizeEvent(event, devices);
+    currentVideoEvent = { deviceId, eventId };
+
+    if (normalized.videoUrl) {
+      videoWin.loadURL(normalized.videoUrl);
+    } else {
+      videoWin.webContents.send(IPC_CHANNELS.VIDEO_EVENT_DATA, normalized);
+    }
+  } catch (err) {
+    console.error('getEvent failed', err);
+  }
+}
+
 // Prevent quit when all windows are closed — tray app stays alive
 app.on('window-all-closed', () => {});
 
 app.on('ready', async () => {
   trayManager.init({
-    onActivityClick: () => windowManager.openActivityWindow(),
+    onActivityClick: () => {
+      trayManager.setUnacknowledgedEvent(null);
+      windowManager.openActivityWindow();
+    },
     onSignOutClick: () => handleSignOut(),
     onUnacknowledgedClick: (event) => {
       trayManager.setUnacknowledgedEvent(null);
@@ -86,8 +155,6 @@ app.on('ready', async () => {
       } else if (updateInfo) {
         openReleasePage(updateInfo.releaseUrl);
       } else {
-        // Already on latest — show notification
-        const { Notification } = require('electron');
         new Notification({ title: 'OnlyCat', body: 'You are running the latest version.' }).show();
       }
     },
@@ -181,6 +248,8 @@ function handleSignOut(): void {
   tokenStore.clear();
   gatewayClient.disconnect();
   devices = [];
+  cachedEvents = [];
+  eventsCached = false;
   trayManager.setDevices([]);
   trayManager.setConnectionState('disconnected');
   trayManager.setUnacknowledgedEvent(null);
@@ -209,10 +278,9 @@ gatewayClient.on('connected', () => {
   if (tokenStore.load()) {
     gatewayClient.request('getDevices', { subscribe: true })
       .then(async (result) => {
-        devices = result as Device[];
-        // Fetch full device details for connectivity info
+        const list = result as Device[];
         const detailed = await Promise.all(
-          devices.map(d =>
+          list.map(d =>
             gatewayClient.request('getDevice', { deviceId: d.deviceId, subscribe: true })
               .then(r => r as Device)
               .catch(() => d)
@@ -220,6 +288,7 @@ gatewayClient.on('connected', () => {
         );
         devices = detailed;
         trayManager.setDevices(devices);
+        if (!eventsCached) fetchAllEvents().catch(console.error);
       })
       .catch((err) => console.error('getDevices (reconnect) failed', err));
   }
@@ -245,25 +314,20 @@ ipcMain.on(IPC_CHANNELS.EVENTS_LOAD_MORE, async (_event, payload: EventsLoadMore
   const activityWin = windowManager.getActivityWindow();
   if (!activityWin) return;
 
+  if (eventsCached) {
+    activityWin.webContents.send(IPC_CHANNELS.EVENTS_LIST, cachedEvents);
+    return;
+  }
+
   try {
-    const requestPayload = payload.beforeGlobalId
-      ? { beforeGlobalId: payload.beforeGlobalId }
-      : { subscribe: true };
-
-    const result = await gatewayClient.request('getEvents', requestPayload);
+    const result = await gatewayClient.request('getEvents', { subscribe: true });
     const normalized = (result as DeviceEvent[]).map(e => normalizeEvent(e, devices));
-
-    // Enrich with cat names from RFID profiles
     const enriched = await Promise.all(normalized.map(async (event) => {
       const catName = await getCatName(event);
       return catName ? { ...event, catName } : event;
     }));
-
-    if (payload.beforeGlobalId) {
-      activityWin.webContents.send(IPC_CHANNELS.EVENTS_LOAD_MORE_RESULT, enriched);
-    } else {
-      activityWin.webContents.send(IPC_CHANNELS.EVENTS_LIST, enriched);
-    }
+    activityWin.webContents.send(IPC_CHANNELS.EVENTS_LIST, enriched);
+    fetchAllEvents().catch(console.error);
   } catch (err) {
     console.error('getEvents failed', err);
   }
@@ -278,65 +342,19 @@ gatewayClient.on('userEventUpdate', async (data: { type: string; body: DeviceEve
   const catName = await getCatName(event);
   const enriched = catName ? { ...event, catName } : event;
 
-  notificationManager.notify(enriched, deviceName, catName);  trayManager.setUnacknowledgedEvent(enriched);
+  cachedEvents = [enriched, ...cachedEvents];
+  trayManager.setUnacknowledgedEvent(enriched);
+  notificationManager.notify(enriched, deviceName, catName);
 
   const activityWin = windowManager.getActivityWindow();
   if (activityWin) activityWin.webContents.send(IPC_CHANNELS.EVENTS_PREPEND, enriched);
 });
 
-// Helper to get cat names from all rfid codes — cache first, API on miss
-async function getCatName(event: DeviceEvent): Promise<string | undefined> {
-  if (!event.rfidCodes?.length) return undefined;
-
-  const names: string[] = [];
-  for (const rfidCode of event.rfidCodes) {
-    // Check cache first
-    let name = settingsStore.getCatName(rfidCode);
-    if (!name) {
-      try {
-        const profile = await gatewayClient.request('getRfidProfile', {
-          rfidCode,
-          deviceId: event.deviceId,
-        }) as { label?: string };
-        name = profile?.label ?? undefined;
-        if (name) settingsStore.setCatName(rfidCode, name);
-      } catch {
-        // skip
-      }
-    }
-    if (name && !names.includes(name)) names.push(name);
-  }
-
-  return names.length ? names.join(' & ') : undefined;
-}
-async function fetchAndSendEvent(deviceId: string, eventId: number): Promise<void> {
-  // Small delay to let the window finish loading
-  await new Promise(r => setTimeout(r, 500));
-  const videoWin = windowManager.getVideoWindow();
-  if (!videoWin) return;
-
-  try {
-    const event = await gatewayClient.request('getEvent', { deviceId, eventId, subscribe: true }) as DeviceEvent;
-    const normalized = normalizeEvent(event, devices);
-    currentVideoEvent = { deviceId, eventId };
-
-    // Load the OnlyCat event page directly in the window
-    if (normalized.videoUrl) {
-      videoWin.loadURL(normalized.videoUrl);
-    } else {
-      videoWin.webContents.send(IPC_CHANNELS.VIDEO_EVENT_DATA, normalized);
-    }
-  } catch (err) {
-    console.error('getEvent failed', err);
-  }
-}
-
+// Video window
 ipcMain.on(IPC_CHANNELS.VIDEO_OPEN, (_event, payload: { deviceId: string; eventId: number }) => {
   windowManager.openVideoWindow(payload.deviceId, payload.eventId);
   fetchAndSendEvent(payload.deviceId, payload.eventId);
 });
-
-// video:ready no longer needed — we use loadURL directly
 
 gatewayClient.on('eventUpdate', (data: { type: string; deviceId: string; eventId: number; body: Partial<DeviceEvent> }) => {
   if (data.type !== 'update' || !currentVideoEvent) return;

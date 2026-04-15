@@ -1,11 +1,9 @@
-import { BrowserWindow } from 'electron';
+import { BrowserWindow, nativeImage } from 'electron';
 import * as path from 'path';
 import { IPC_CHANNELS } from '../shared/ipcChannels';
 
-// __dirname at runtime = dist/main/main/
-// preloads live at    = dist/renderer/renderer/<window>/preload.js
-// HTML files live at  = src/renderer/<window>/index.html (not compiled, loaded directly)
 const DIST_ROOT = path.join(__dirname, '../../..'); // → project root
+const APP_ICON = nativeImage.createFromPath(path.join(DIST_ROOT, 'assets/icon-256.png'));
 
 class WindowManager {
   private tokenDialog: BrowserWindow | null = null;
@@ -24,6 +22,7 @@ class WindowManager {
       resizable: false,
       title: 'OnlyCat — Sign In',
       autoHideMenuBar: true,
+      icon: APP_ICON,
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
@@ -58,6 +57,7 @@ class WindowManager {
       height: 700,
       title: 'OnlyCat — Recent Activity',
       autoHideMenuBar: true,
+      icon: APP_ICON,
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
@@ -86,6 +86,7 @@ class WindowManager {
       height: 900,
       title: 'OnlyCat — Event Video',
       autoHideMenuBar: true,
+      icon: APP_ICON,
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,

@@ -5,14 +5,19 @@ const loadMoreBtn = document.getElementById('load-more-btn') as HTMLButtonElemen
 const emptyMsg = document.getElementById('empty-msg') as HTMLParagraphElement;
 const tabs = document.querySelectorAll<HTMLButtonElement>('.tab');
 const searchInput = document.getElementById('search-input') as HTMLInputElement;
+const filterChecks = document.querySelectorAll<HTMLInputElement>('.filter-check');
 
 let allEvents: DeviceEvent[] = [];
 let activeTab: 'video' | 'all' = 'video';
 let searchTerm = '';
+let activeClassifications: Set<number> = new Set([0, 1, 2, 3]);
 
 function formatTime(iso: string): string {
   try {
-    return new Date(iso).toLocaleString();
+    return new Date(iso).toLocaleString('en-GB', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit'
+    });
   } catch {
     return iso;
   }
@@ -30,7 +35,23 @@ function visibleEvents(): DeviceEvent[] {
     );
   }
 
+  // Apply classification filters
+  events = events.filter(e => {
+    const cls = e.eventClassification ?? 0;
+    return activeClassifications.has(cls);
+  });
+
   return events;
+}
+
+function classificationBadge(cls?: number): string {
+  switch (cls) {
+    case 1: return `<span class="badge badge-green">Entry Allowed</span>`;
+    case 2: return `<span class="badge badge-blue">Exit Allowed</span>`;
+    case 3: return `<span class="badge badge-red">Contraband Detected</span>`;
+    case 0: return `<span class="badge badge-grey">No Activity</span>`;
+    default: return '';
+  }
 }
 
 function renderEvent(event: DeviceEvent): HTMLLIElement {
@@ -46,6 +67,7 @@ function renderEvent(event: DeviceEvent): HTMLLIElement {
     ${thumb}
     <div class="event-info">
       <span class="event-device">${event.deviceName ?? event.deviceId}</span>
+      ${classificationBadge(event.eventClassification)}
       ${event.catName ? `<span class="event-type">${event.catName}</span>` : ''}
       <span class="event-type event-meta">src:${event.eventTriggerSource ?? '?'} cls:${event.eventClassification ?? '?'}</span>
       <span class="event-time">${formatTime(event.createdAt ?? '')}</span>
@@ -88,11 +110,23 @@ searchInput.addEventListener('input', () => {
   renderList();
 });
 
+// Classification filters
+filterChecks.forEach(checkbox => {
+  checkbox.addEventListener('change', () => {
+    activeClassifications = new Set(
+      Array.from(filterChecks)
+        .filter(c => c.checked)
+        .map(c => parseInt(c.dataset.classification ?? '0'))
+    );
+    renderList();
+  });
+});
+
 // IPC listeners
 window.onlycat.onEventsList!((events: DeviceEvent[]) => {
   allEvents = events;
   renderList();
-  loadMoreBtn.disabled = events.length === 0;
+  loadMoreBtn.hidden = true; // all events loaded at once
 });
 
 window.onlycat.onEventsLoadMoreResult!((events: DeviceEvent[]) => {
