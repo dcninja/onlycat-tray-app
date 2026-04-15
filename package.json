@@ -64,12 +64,12 @@
     },
     "mac": {
       "target": ["dmg", "zip"],
-      "icon": "assets/icon-256.png",
+      "icon": "assets/icon-512.png",
       "category": "public.app-category.utilities"
     },
     "win": {
       "target": ["nsis"],
-      "icon": "assets/icon-256.png"
+      "icon": "assets/icon-512.png"
     },
     "nsis": {
       "oneClick": false,
