@@ -2,6 +2,7 @@
   "name": "onlycat-tray-app",
   "version": "1.0.0",
   "description": "OnlyCat system tray desktop application",
+  "author": "dcninja",
   "main": "dist/main/main/index.js",
   "scripts": {
     "build": "tsc -p tsconfig.main.json && tsc -p tsconfig.preload.json && tsc -p tsconfig.renderer.json && npm run copy-assets",
@@ -17,12 +18,12 @@
     "dist:win": "npm run build && electron-builder --win"
   },
   "dependencies": {
-    "electron": "^41.1.1",
     "socket.io-client": "^4.7.5"
   },
   "devDependencies": {
     "@types/jest": "^29.5.12",
     "@types/node": "^20.14.0",
+    "electron": "^41.1.1",
     "electron-builder": "^26.8.1",
     "electron-mock-ipc": "^0.3.12",
     "fast-check": "^3.19.0",
