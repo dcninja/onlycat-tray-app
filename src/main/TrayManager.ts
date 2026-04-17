@@ -9,6 +9,7 @@ type OnUnacknowledgedClick = (event: DeviceEvent) => void;
 type OnTestNotification = () => void;
 type OnToggleVideoOnly = () => void;
 type OnCheckUpdate = () => void;
+type OnActivatePolicy = (deviceId: string, policyId: number) => void;
 
 class TrayManager {
   private tray: Tray | null = null;
@@ -22,8 +23,10 @@ class TrayManager {
   private onTestNotification: OnTestNotification = () => {};
   private onToggleVideoOnly: OnToggleVideoOnly = () => {};
   private onCheckUpdate: OnCheckUpdate = () => {};
+  private onActivatePolicy: OnActivatePolicy = () => {};
   private notifyOnVideoOnly: boolean = true;
   private updateAvailableVersion: string | null = null;
+  private transitPolicies: Map<string, import('../shared/types').DeviceTransitPolicy[]> = new Map();
 
   init(callbacks: {
     onActivityClick: OnActivityClick;
@@ -32,6 +35,7 @@ class TrayManager {
     onTestNotification: OnTestNotification;
     onToggleVideoOnly: OnToggleVideoOnly;
     onCheckUpdate: OnCheckUpdate;
+    onActivatePolicy: OnActivatePolicy;
     notifyOnVideoOnly: boolean;
   }): void {
     this.onActivityClick = callbacks.onActivityClick;
@@ -40,6 +44,7 @@ class TrayManager {
     this.onTestNotification = callbacks.onTestNotification;
     this.onToggleVideoOnly = callbacks.onToggleVideoOnly;
     this.onCheckUpdate = callbacks.onCheckUpdate;
+    this.onActivatePolicy = callbacks.onActivatePolicy;
     this.notifyOnVideoOnly = callbacks.notifyOnVideoOnly;
 
     // Use the cat icon from assets
@@ -47,6 +52,12 @@ class TrayManager {
     const icon = nativeImage.createFromPath(iconPath);
     this.tray = new Tray(icon);
     this.tray.setToolTip('OnlyCat');
+    this.rebuild();
+  }
+
+  setTransitPolicies(policies: Map<string, import('../shared/types').DeviceTransitPolicy[]>, devices: Device[]): void {
+    this.transitPolicies = policies;
+    this.devices = devices;
     this.rebuild();
   }
 
@@ -85,16 +96,14 @@ class TrayManager {
   buildMenuTemplate(): MenuItemConstructorOptions[] {
     const template: MenuItemConstructorOptions[] = [];
 
-    // Connection status header
-    const statusLabel =
-      this.connectionState === 'connected'
-        ? '● Connected'
-        : this.connectionState === 'reconnecting'
+    // Connection status header — only show when not connected
+    if (this.connectionState !== 'connected') {
+      const statusLabel = this.connectionState === 'reconnecting'
         ? '↻ Reconnecting...'
         : '○ Disconnected';
-
-    template.push({ label: statusLabel, enabled: false });
-    template.push({ type: 'separator' });
+      template.push({ label: statusLabel, enabled: false });
+      template.push({ type: 'separator' });
+    }
 
     // Unacknowledged event banner
     if (this.unacknowledgedEvent) {
@@ -126,7 +135,32 @@ class TrayManager {
 
     template.push({ type: 'separator' });
     template.push({ label: 'View Recent Activity', click: () => this.onActivityClick() });
-    template.push({ type: 'separator' });
+
+    // Door Policy section
+    if (this.transitPolicies.size > 0) {
+      template.push({ type: 'separator' });
+      template.push({ label: 'Door Policy', enabled: false });
+
+      for (const device of this.devices) {
+        const policies = this.transitPolicies.get(device.deviceId) ?? [];
+        if (!policies.length) continue;
+
+        const deviceName = device.name ?? device.description ?? device.deviceId;
+        if (this.devices.length > 1) {
+          template.push({ label: `  ${deviceName}`, enabled: false });
+        }
+
+        for (const policy of policies) {
+          const isActive = device.deviceTransitPolicyId === policy.deviceTransitPolicyId;
+          const label = policy.name ?? policy.description ?? `Policy ${policy.deviceTransitPolicyId}`;
+          template.push({
+            label: `  ${isActive ? '✓ ' : '    '}${label}`,
+            click: isActive ? undefined : () => this.onActivatePolicy(device.deviceId, policy.deviceTransitPolicyId),
+            enabled: !isActive,
+          });
+        }
+      }
+    }    template.push({ type: 'separator' });
     template.push({
       label: `${this.notifyOnVideoOnly ? '✓' : '○'} Notify only on Video Movement`,
       click: () => this.onToggleVideoOnly(),

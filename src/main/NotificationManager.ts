@@ -1,7 +1,8 @@
-import { Notification, net } from 'electron';
+import { Notification } from 'electron';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import * as https from 'https';
 import type { DeviceEvent } from '../shared/types';
 import { classificationLabel } from '../shared/eventLabels';
 
@@ -20,24 +21,18 @@ function classificationEmoji(classification?: number): string {
 async function downloadToTemp(url: string): Promise<string | undefined> {
   return new Promise((resolve) => {
     const tmpPath = path.join(os.tmpdir(), `onlycat-thumb-${Date.now()}.jpg`);
-    const request = net.request(url);
-    const chunks: Buffer[] = [];
+    const file = fs.createWriteStream(tmpPath);
 
-    request.on('response', (response) => {
-      response.on('data', (chunk) => chunks.push(Buffer.from(chunk)));
-      response.on('end', () => {
-        try {
-          fs.writeFileSync(tmpPath, Buffer.concat(chunks));
-          resolve(tmpPath);
-        } catch {
-          resolve(undefined);
-        }
+    https.get(url, (response) => {
+      response.pipe(file);
+      file.on('finish', () => {
+        file.close();
+        resolve(tmpPath);
       });
-      response.on('error', () => resolve(undefined));
+    }).on('error', () => {
+      fs.unlink(tmpPath, () => {});
+      resolve(undefined);
     });
-
-    request.on('error', () => resolve(undefined));
-    request.end();
   });
 }
 
@@ -67,7 +62,7 @@ class NotificationManager {
     const timePart = time ? ` at ${time}` : '';
     const body = `${who}${timePart}`;
 
-    // Download thumbnail to temp file for notification icon
+    // Download thumbnail for notification icon
     let iconPath: string | undefined;
     if (event.thumbnailUrl) {
       iconPath = await downloadToTemp(event.thumbnailUrl);

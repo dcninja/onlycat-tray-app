@@ -99,9 +99,25 @@ main {
 
 .event-item:hover { background: #1e1e30; }
 
+.share-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid #333;
+  border-radius: 6px;
+  color: #9e9e9e;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: background 0.15s, color 0.15s;
+  align-self: center;
+}
+
+.share-btn:hover { background: #2a2a3e; color: #e0e0e0; }
+
 .event-thumb {
-  width: 64px;
-  height: 48px;
+  width: 96px;
+  height: 72px;
   object-fit: cover;
   border-radius: 4px;
   background: #2a2a3e;
@@ -109,8 +125,8 @@ main {
 }
 
 .event-thumb-placeholder {
-  width: 64px;
-  height: 48px;
+  width: 96px;
+  height: 72px;
   border-radius: 4px;
   background: #2a2a3e;
   flex-shrink: 0;

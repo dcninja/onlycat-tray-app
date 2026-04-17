@@ -72,10 +72,23 @@ function renderEvent(event: DeviceEvent): HTMLLIElement {
       <span class="event-type event-meta">src:${event.eventTriggerSource ?? '?'} cls:${event.eventClassification ?? '?'}</span>
       <span class="event-time">${formatTime(event.createdAt ?? '')}</span>
     </div>
+    <button class="share-btn" title="Copy link">🔗</button>
   `;
 
-  li.addEventListener('click', () => {
+  li.addEventListener('click', (e) => {
+    // Don't open video if share button was clicked
+    if ((e.target as HTMLElement).classList.contains('share-btn')) return;
     window.onlycat.openVideo!(event.deviceId, event.eventId);
+  });
+
+  const shareBtn = li.querySelector('.share-btn') as HTMLButtonElement;
+  shareBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    if (event.videoUrl) {
+      window.onlycat.copyUrl!(event.videoUrl);
+      shareBtn.textContent = '✓';
+      setTimeout(() => { shareBtn.textContent = '🔗'; }, 2000);
+    }
   });
 
   return li;

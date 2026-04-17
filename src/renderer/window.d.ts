@@ -10,6 +10,7 @@ declare global {
       // activity-window
       loadMore?: (beforeGlobalId?: number) => void;
       openVideo?: (deviceId: string, eventId: number) => void;
+      copyUrl?: (url: string) => void;
       onEventsList?: (cb: (events: DeviceEvent[]) => void) => void;
       onEventsLoadMoreResult?: (cb: (events: DeviceEvent[]) => void) => void;
       onEventPrepend?: (cb: (event: DeviceEvent) => void) => void;

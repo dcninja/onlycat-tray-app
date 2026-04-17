@@ -53,7 +53,7 @@ class WindowManager {
     }
 
     this.activityWindow = new BrowserWindow({
-      width: 600,
+      width: 500,
       height: 700,
       title: 'OnlyCat — Recent Activity',
       autoHideMenuBar: true,

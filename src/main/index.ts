@@ -1,4 +1,4 @@
-import { app, ipcMain, Notification } from 'electron';
+import { app, ipcMain, Notification, clipboard } from 'electron';
 import tokenStore from './TokenStore';
 import gatewayClient from './GatewayClient';
 import trayManager from './TrayManager';
@@ -9,7 +9,7 @@ import { checkForUpdates, openReleasePage } from './UpdateChecker';
 import { classificationLabel, triggerSourceLabel } from '../shared/eventLabels';
 import { IPC_CHANNELS } from '../shared/ipcChannels';
 import type { AuthSubmitTokenPayload, EventsLoadMorePayload } from '../shared/ipcChannels';
-import type { Device, DeviceEvent } from '../shared/types';
+import type { Device, DeviceEvent, DeviceTransitPolicy } from '../shared/types';
 
 // Set app name before ready so OS notifications show "OnlyCat" not "Electron"
 app.setName('OnlyCat');
@@ -22,6 +22,7 @@ if (process.platform === 'linux') {
 const GATEWAY_URL = 'https://gateway.onlycat.com';
 
 let devices: Device[] = [];
+let transitPolicies: Map<string, DeviceTransitPolicy[]> = new Map(); // deviceId -> policies
 let cachedEvents: DeviceEvent[] = [];
 let eventsCached = false;
 let disconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -32,25 +33,37 @@ let updateInfo: { latestVersion: string; releaseUrl: string } | null = null;
 async function fetchAllEvents(): Promise<void> {
   const allEvents: DeviceEvent[] = [];
   let beforeGlobalId: number | undefined;
+  let retries = 0;
 
   while (true) {
-    const payload = beforeGlobalId
-      ? { beforeGlobalId }
-      : { subscribe: true };
+    try {
+      const payload = beforeGlobalId
+        ? { beforeGlobalId }
+        : { subscribe: true };
 
-    const page = await gatewayClient.request('getEvents', payload) as DeviceEvent[];
-    if (!page?.length) break;
+      const page = await gatewayClient.request('getEvents', payload) as DeviceEvent[];
+      if (!page?.length) break;
 
-    const enriched = await Promise.all(page.map(async (e) => {
-      const normalized = normalizeEvent(e, devices);
-      const catName = await getCatName(normalized);
-      return catName ? { ...normalized, catName } : normalized;
-    }));
+      const enriched = await Promise.all(page.map(async (e) => {
+        const normalized = normalizeEvent(e, devices);
+        const catName = await getCatName(normalized);
+        return catName ? { ...normalized, catName } : normalized;
+      }));
 
-    allEvents.push(...enriched);
-    beforeGlobalId = page[page.length - 1].globalId;
+      allEvents.push(...enriched);
+      beforeGlobalId = page[page.length - 1].globalId;
+      retries = 0; // reset retries on success
 
-    if (page.length < 20) break;
+      if (page.length < 20) break;
+    } catch (err) {
+      retries++;
+      if (retries >= 3) {
+        console.error('fetchAllEvents: giving up after 3 retries', err);
+        break;
+      }
+      // Wait before retrying
+      await new Promise(r => setTimeout(r, 2000 * retries));
+    }
   }
 
   cachedEvents = allEvents;
@@ -106,6 +119,20 @@ async function getCatName(event: DeviceEvent): Promise<string | undefined> {
   return names.length ? names.join(' & ') : undefined;
 }
 
+async function fetchTransitPolicies(): Promise<void> {
+  for (const device of devices) {
+    try {
+      const policies = await gatewayClient.request('getDeviceTransitPolicies', {
+        deviceId: device.deviceId,
+      }) as DeviceTransitPolicy[];
+      transitPolicies.set(device.deviceId, policies);
+    } catch {
+      // skip
+    }
+  }
+  trayManager.setTransitPolicies(transitPolicies, devices);
+}
+
 async function fetchAndSendEvent(deviceId: string, eventId: number): Promise<void> {
   await new Promise(r => setTimeout(r, 500));
   const videoWin = windowManager.getVideoWindow();
@@ -146,8 +173,10 @@ app.on('ready', async () => {
       settingsStore.notifyOnVideoOnly = newVal;
       trayManager.setNotifyOnVideoOnly(newVal);
     },
-    onCheckUpdate: async () => {
-      const info = await checkForUpdates();
+    onActivatePolicy: (deviceId: string, policyId: number) => {
+      ipcMain.emit('policy:activate', null, { deviceId, policyId });
+    },
+    onCheckUpdate: async () => {      const info = await checkForUpdates();
       if (info?.hasUpdate) {
         updateInfo = { latestVersion: info.latestVersion, releaseUrl: info.releaseUrl };
         trayManager.setUpdateAvailable(info.latestVersion);
@@ -220,6 +249,7 @@ ipcMain.on(IPC_CHANNELS.AUTH_SUBMIT_TOKEN, (_event, payload: AuthSubmitTokenPayl
         );
         devices = detailed;
         trayManager.setDevices(devices);
+        fetchTransitPolicies().catch(console.error);
       })
       .catch((err) => console.error('getDevices failed', err));
   };
@@ -288,7 +318,11 @@ gatewayClient.on('connected', () => {
         );
         devices = detailed;
         trayManager.setDevices(devices);
-        if (!eventsCached) fetchAllEvents().catch(console.error);
+        // Fetch transit policies for each device
+        await fetchTransitPolicies();
+        if (!eventsCached) {
+          setTimeout(() => fetchAllEvents().catch(console.error), 1000);
+        }
       })
       .catch((err) => console.error('getDevices (reconnect) failed', err));
   }
@@ -348,6 +382,28 @@ gatewayClient.on('userEventUpdate', async (data: { type: string; body: DeviceEve
 
   const activityWin = windowManager.getActivityWindow();
   if (activityWin) activityWin.webContents.send(IPC_CHANNELS.EVENTS_PREPEND, enriched);
+});
+
+// Copy URL to clipboard
+ipcMain.on('copy:url', (_event, payload: { url: string }) => {
+  clipboard.writeText(payload.url);
+});
+
+// Activate transit policy
+ipcMain.on('policy:activate', async (_event, payload: { deviceId: string; policyId: number }) => {
+  try {
+    await gatewayClient.request('activateDeviceTransitPolicy', {
+      deviceId: payload.deviceId,
+      deviceTransitPolicyId: payload.policyId,
+    });
+    // Refresh device to confirm
+    const updated = await gatewayClient.request('getDevice', { deviceId: payload.deviceId, subscribe: true }) as Device;
+    devices = devices.map(d => d.deviceId === payload.deviceId ? updated : d);
+    trayManager.setDevices(devices);
+    trayManager.setTransitPolicies(transitPolicies, devices);
+  } catch (err) {
+    console.error('activateDeviceTransitPolicy failed', err);
+  }
 });
 
 // Video window

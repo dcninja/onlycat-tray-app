@@ -7,12 +7,15 @@ const EVENTS_LIST = 'events:list';
 const EVENTS_LOAD_MORE_RESULT = 'events:load-more-result';
 const EVENTS_PREPEND = 'events:prepend';
 const VIDEO_OPEN = 'video:open';
+const COPY_URL = 'copy:url';
 
 contextBridge.exposeInMainWorld('onlycat', {
   loadMore: (beforeGlobalId?: number) =>
     ipcRenderer.send(EVENTS_LOAD_MORE, { beforeGlobalId }),
   openVideo: (deviceId: string, eventId: number) =>
     ipcRenderer.send(VIDEO_OPEN, { deviceId, eventId }),
+  copyUrl: (url: string) =>
+    ipcRenderer.send(COPY_URL, { url }),
   onEventsList: (cb: (events: DeviceEvent[]) => void) => {
     ipcRenderer.on(EVENTS_LIST, (_e, events: DeviceEvent[]) => cb(events));
   },

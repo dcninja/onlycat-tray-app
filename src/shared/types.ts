@@ -1,9 +1,17 @@
+export interface DeviceTransitPolicy {
+  deviceTransitPolicyId: number;
+  name?: string;
+  description?: string;
+  deviceId?: string;
+}
+
 export interface Device {
   deviceId: string;
   cursorId: string;
   description?: string;
   name?: string;
   online?: boolean;
+  deviceTransitPolicyId?: number;
   connectivity?: {
     connected: boolean;
     timestamp: number; // Unix ms
