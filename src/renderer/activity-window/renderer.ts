@@ -59,7 +59,7 @@ function visibleEvents(): DeviceEvent[] {
     // If direction filter is active and doesn't match, hide
     if (activeDirections.size < 2 && !activeDirections.has(lastSub.direction)) return false;
     // If action filter is active and doesn't match, hide
-    if (activeActions.size < 2 && !activeActions.has(lastSub.action)) return false;
+    if (activeActions.size < 3 && !activeActions.has(lastSub.action)) return false;
     return true;
   });
 

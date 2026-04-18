@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.3.0] - 2026-04-18
+
+### Added
+- **SQLite local database** — events are now persisted to `events.db` between sessions
+  - First run fetches full event history with 250ms throttle between pages to be polite to the API
+  - Subsequent runs load from DB instantly, then only fetch events newer than the last stored one
+  - Live events are saved to DB as they arrive
+  - Dramatically reduces API calls after first run
+
+### Fixed
+- Transit and Deny action filters were swapped in both the activity window and notification settings
+- Action filter threshold was hardcoded to 2 — now correctly handles all 3 actions (Transit, Peek, Deny)
+
 ## [1.2.0] - 2026-04-18
 
 ### Added

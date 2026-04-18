@@ -10,6 +10,7 @@ import { classificationLabel, triggerSourceLabel, formatSubevent } from '../shar
 import { IPC_CHANNELS } from '../shared/ipcChannels';
 import type { AuthSubmitTokenPayload, EventsLoadMorePayload } from '../shared/ipcChannels';
 import type { Device, DeviceEvent, DeviceTransitPolicy } from '../shared/types';
+import { saveEvents, loadAllEvents, getLatestGlobalId, getEventCount, setMeta, getMeta } from './EventDatabase';
 
 // Set app name before ready so OS notifications show "OnlyCat" not "Electron"
 app.setName('OnlyCat');
@@ -29,11 +30,18 @@ let disconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let currentVideoEvent: { deviceId: string; eventId: number } | null = null;
 let updateInfo: { latestVersion: string; releaseUrl: string } | null = null;
 
-// Fetch all event pages and cache them
+// Fetch events from API — only new ones if we have a DB, full history on first run
 async function fetchAllEvents(): Promise<void> {
-  const allEvents: DeviceEvent[] = [];
+  const existingCount = await getEventCount();
+  const latestGlobalId = await getLatestGlobalId();
+  const isFirstRun = existingCount === 0;
+
+  console.log(`fetchAllEvents: existingCount=${existingCount}, latestGlobalId=${latestGlobalId}, firstRun=${isFirstRun}`);
+
+  const allNewEvents: DeviceEvent[] = [];
   let beforeGlobalId: number | undefined;
   let retries = 0;
+  let pageCount = 0;
 
   while (true) {
     try {
@@ -44,10 +52,14 @@ async function fetchAllEvents(): Promise<void> {
       const page = await gatewayClient.request('getEvents', payload) as DeviceEvent[];
       if (!page?.length) break;
 
-      const enriched = await Promise.all(page.map(async (e) => {
+      // On subsequent runs, filter out events we already have
+      const newPage = isFirstRun ? page : page.filter(e => !latestGlobalId || e.globalId > latestGlobalId);
+
+      const enriched = await Promise.all(newPage.map(async (e) => {
         const normalized = normalizeEvent(e, devices);
         const catName = await getCatName(normalized);
         let summary: string | undefined;
+        let subevents: DeviceEvent['subevents'];
         if (normalized.accessToken) {
           try {
             const result = await gatewayClient.request('getEventSummary', {
@@ -56,37 +68,53 @@ async function fetchAllEvents(): Promise<void> {
               accessToken: normalized.accessToken,
               subscribe: true,
             }) as { subevents?: Array<{ startFrameIndex: number; endFrameIndex: number; direction: string; action: string; rfidCode: string | null }> } | null;
-
             if (result?.subevents?.length) {
-              const subevents = result.subevents;
-              // Build human-readable summary from subevents
-              const parts = subevents.map(s => formatSubevent(s.direction, s.action));
-              summary = parts[parts.length - 1]; // show last subevent (final outcome)
-              return { ...normalized, ...(catName ? { catName } : {}), summary, subevents };
+              const parts = result.subevents.map(s => formatSubevent(s.direction, s.action));
+              summary = parts[parts.length - 1];
+              subevents = result.subevents;
             }
           } catch { /* skip */ }
         }
-        return { ...normalized, ...(catName ? { catName } : {}), ...(summary ? { summary } : {}) };
+        return { ...normalized, ...(catName ? { catName } : {}), ...(summary ? { summary, subevents } : {}) };
       }));
 
-      allEvents.push(...enriched);
+      allNewEvents.push(...enriched);
       beforeGlobalId = page[page.length - 1].globalId;
-      retries = 0; // reset retries on success
+      retries = 0;
+      pageCount++;
+
+      // On subsequent runs, stop when we reach events we already have
+      if (!isFirstRun && latestGlobalId && page.some(e => e.globalId <= latestGlobalId)) {
+        console.log(`fetchAllEvents: reached known events at page ${pageCount}, stopping`);
+        break;
+      }
 
       if (page.length < 20) break;
+
+      // Throttle on first run to be polite to the API
+      if (isFirstRun) {
+        await new Promise(r => setTimeout(r, 250));
+      }
     } catch (err) {
       retries++;
       if (retries >= 3) {
         console.error('fetchAllEvents: giving up after 3 retries', err);
         break;
       }
-      // Wait before retrying
       await new Promise(r => setTimeout(r, 2000 * retries));
     }
   }
 
-  cachedEvents = allEvents;
+  if (allNewEvents.length > 0) {
+    await saveEvents(allNewEvents);
+    console.log(`fetchAllEvents: saved ${allNewEvents.length} new events`);
+  }
+
+  // Load full cache from DB
+  cachedEvents = await loadAllEvents();
   eventsCached = true;
+  await setMeta('lastRun', new Date().toISOString());
+  console.log(`fetchAllEvents: total cached events = ${cachedEvents.length}`);
 }
 
 // Build normalized event with derived URLs and device name
@@ -340,6 +368,13 @@ gatewayClient.on('connected', () => {
         // Fetch transit policies for each device
         await fetchTransitPolicies();
         if (!eventsCached) {
+          // Pre-load from DB immediately so UI is fast, then fetch new events from API
+          loadAllEvents().then(stored => {
+            if (stored.length > 0 && !eventsCached) {
+              cachedEvents = stored;
+              eventsCached = true;
+            }
+          }).catch(console.error);
           setTimeout(() => fetchAllEvents().catch(console.error), 1000);
         }
       })
@@ -418,8 +453,7 @@ gatewayClient.on('userEventUpdate', async (data: { type: string; body: DeviceEve
   // Apply classification filter
   const cls = enriched.eventClassification ?? 0;
   if (!ns.classifications.includes(cls)) {
-    // Still cache and show in activity window, just don't notify
-    cachedEvents = [enriched, ...cachedEvents];
+    cacheEvent(enriched);
     const activityWin = windowManager.getActivityWindow();
     if (activityWin) activityWin.webContents.send(IPC_CHANNELS.EVENTS_PREPEND, enriched);
     return;
@@ -429,25 +463,25 @@ gatewayClient.on('userEventUpdate', async (data: { type: string; body: DeviceEve
   const lastSub = enriched.subevents?.[enriched.subevents.length - 1];
   if (lastSub) {
     if (ns.directions.length < 2 && !ns.directions.includes(lastSub.direction)) {
-      cachedEvents = [enriched, ...cachedEvents];
+      cacheEvent(enriched);
       const activityWin = windowManager.getActivityWindow();
       if (activityWin) activityWin.webContents.send(IPC_CHANNELS.EVENTS_PREPEND, enriched);
       return;
     }
-    if (ns.actions.length < 2 && !ns.actions.includes(lastSub.action)) {
-      cachedEvents = [enriched, ...cachedEvents];
+    if (ns.actions.length < 3 && !ns.actions.includes(lastSub.action)) {
+      cacheEvent(enriched);
       const activityWin = windowManager.getActivityWindow();
       if (activityWin) activityWin.webContents.send(IPC_CHANNELS.EVENTS_PREPEND, enriched);
       return;
     }
   } else if (!ns.showNoSummary) {
-    cachedEvents = [enriched, ...cachedEvents];
+    cacheEvent(enriched);
     const activityWin = windowManager.getActivityWindow();
     if (activityWin) activityWin.webContents.send(IPC_CHANNELS.EVENTS_PREPEND, enriched);
     return;
   }
 
-  cachedEvents = [enriched, ...cachedEvents];
+  cacheEvent(enriched);
   trayManager.setUnacknowledgedEvent(enriched);
   notificationManager.notify(enriched, deviceName, catName);
 
@@ -483,6 +517,12 @@ ipcMain.on('policy:activate', async (_event, payload: { deviceId: string; policy
     console.error('activateDeviceTransitPolicy failed', err);
   }
 });
+
+// Helper to add event to cache and persist to DB
+function cacheEvent(event: DeviceEvent): void {
+  cachedEvents = [event, ...cachedEvents];
+  saveEvents([event]).catch(console.error);
+}
 
 // Video window
 ipcMain.on(IPC_CHANNELS.VIDEO_OPEN, (_event, payload: { deviceId: string; eventId: number }) => {
