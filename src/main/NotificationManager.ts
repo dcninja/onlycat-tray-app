@@ -60,8 +60,8 @@ class NotificationManager {
       : `OnlyCat — ${deviceName}`;
     const who = catName ? `${catName} was detected` : 'Motion detected';
     const timePart = time ? ` at ${time}` : '';
-    const summaryPart = event.summary ? ` · ${event.summary}` : '';
-    const body = `${who}${timePart}${summaryPart}`;
+    const summaryLine = event.summary ? `\n${event.summary}` : '';
+    const body = `${who}${timePart}${summaryLine}`;
 
     // Download thumbnail for notification icon
     let iconPath: string | undefined;

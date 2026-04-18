@@ -242,7 +242,23 @@ app.on('ready', async () => {
         if (result?.length) {
           const event = normalizeEvent(result[0], devices);
           const catName = await getCatName(event);
-          await notificationManager.notify(event, event.deviceName ?? event.deviceId, catName);
+          let enriched = catName ? { ...event, catName } : event;
+          // Fetch event summary
+          if (event.accessToken) {
+            try {
+              const summaryResult = await gatewayClient.request('getEventSummary', {
+                deviceId: event.deviceId,
+                eventId: event.eventId,
+                accessToken: event.accessToken,
+                subscribe: true,
+              }) as { subevents?: Array<{ startFrameIndex: number; endFrameIndex: number; direction: string; action: string; rfidCode: string | null }> } | null;
+              if (summaryResult?.subevents?.length) {
+                const parts = summaryResult.subevents.map(s => formatSubevent(s.direction, s.action));
+                enriched = { ...enriched, summary: parts[parts.length - 1], subevents: summaryResult.subevents };
+              }
+            } catch { /* skip */ }
+          }
+          await notificationManager.notify(enriched, enriched.deviceName ?? enriched.deviceId, catName);
         }
       } catch (err) {
         console.error('test notification failed', err);

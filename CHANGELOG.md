@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.1] - 2026-04-18
+
+### Added
+- Event summary with emojis shown on a new line in desktop notifications
+- Test notification now fetches event summary before firing
+
 ## [1.3.0] - 2026-04-18
 
 ### Added
@@ -8,6 +14,8 @@
   - Subsequent runs load from DB instantly, then only fetch events newer than the last stored one
   - Live events are saved to DB as they arrive
   - Dramatically reduces API calls after first run
+- **Event summary in notifications** — direction and action emojis shown on a new line in desktop notifications
+- **Test notification enriched** — test notification now fetches event summary before firing
 
 ### Fixed
 - Transit and Deny action filters were swapped in both the activity window and notification settings

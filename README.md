@@ -87,7 +87,8 @@ Your token is stored securely using your OS keychain (or encrypted local storage
 When a new event is detected you'll receive a desktop notification showing:
 - Device name and classification (🟢 Entry Allowed / 🔴 Contraband Detected)
 - Cat name (if RFID chip detected)
-- Time of event and event summary (e.g. 🢃 In ✅ Transit)
+- Time of event
+- Event summary with emojis on a new line (e.g. 🢃 In ✅ Transit)
 - Thumbnail image (macOS/Windows)
 
 Click the notification to open the event video directly.
