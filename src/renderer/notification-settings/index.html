@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'" />
+  <title>OnlyCat — Notification Settings</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header><h1>Notification Settings</h1></header>
+  <main>
+    <section>
+      <h2>General</h2>
+      <label class="toggle-label">
+        <input type="checkbox" id="video-only" />
+        Only notify for events with video movement
+      </label>
+    </section>
+
+    <section>
+      <h2>Event Classification</h2>
+      <label class="toggle-label"><input type="checkbox" class="cls-check" data-cls="1" /> Entry Allowed</label>
+      <label class="toggle-label"><input type="checkbox" class="cls-check" data-cls="3" /> Contraband Detected</label>
+      <label class="toggle-label"><input type="checkbox" class="cls-check" data-cls="0" /> No Activity</label>
+    </section>
+
+    <section>
+      <h2>Direction</h2>
+      <label class="toggle-label"><input type="checkbox" class="dir-check" data-dir="INWARD" /> 🢃 Inward</label>
+      <label class="toggle-label"><input type="checkbox" class="dir-check" data-dir="OUTWARD" /> 🢁 Outward</label>
+    </section>
+
+    <section>
+      <h2>Action</h2>
+      <label class="toggle-label"><input type="checkbox" class="act-check" data-act="TRANSIT" /> ✅ Transit</label>
+      <label class="toggle-label"><input type="checkbox" class="act-check" data-act="PEEK" /> 👀 Peek</label>
+      <label class="toggle-label"><input type="checkbox" class="act-check" data-act="DENY" /> ⛔ Deny</label>
+      <label class="toggle-label"><input type="checkbox" id="no-summary" /> Events without summary data</label>
+    </section>
+
+    <div class="actions">
+      <button id="save-btn">Save</button>
+      <button id="cancel-btn" class="secondary">Cancel</button>
+    </div>
+  </main>
+  <script type="module" src="renderer.js"></script>
+</body>
+</html>

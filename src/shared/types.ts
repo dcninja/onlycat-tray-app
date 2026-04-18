@@ -38,6 +38,14 @@ export interface DeviceEvent {
   createdAt?: string;       // alias for timestamp
   videoUrl?: string;
   thumbnailUrl?: string;
+  summary?: string;         // from getEventSummary (display text)
+  subevents?: Array<{
+    startFrameIndex: number;
+    endFrameIndex: number;
+    rfidCode: string | null;
+    direction: string;
+    action: string;
+  }>;
 }
 
 export interface LiveUpdate<T> {

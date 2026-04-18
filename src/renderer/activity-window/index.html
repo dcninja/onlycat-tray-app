@@ -13,22 +13,40 @@
     <div class="tabs">
       <button class="tab active" data-tab="video">Video Movement Events</button>
       <button class="tab" data-tab="all">All Events</button>
+      <button class="tab" data-tab="unknown">Unknown Cats</button>
     </div>
     <div class="search-bar">
       <input id="search-input" type="text" placeholder="Search by cat name..." autocomplete="off" />
     </div>
     <div class="filters">
+      <div class="filter-group-label">Event Classification</div>
       <label class="filter-label">
         <input type="checkbox" class="filter-check" data-classification="1" checked /> Entry Allowed
-      </label>
-      <label class="filter-label">
-        <input type="checkbox" class="filter-check" data-classification="2" checked /> Exit Allowed
       </label>
       <label class="filter-label">
         <input type="checkbox" class="filter-check" data-classification="3" checked /> Contraband Detected
       </label>
       <label class="filter-label">
         <input type="checkbox" class="filter-check" data-classification="0" checked /> No Activity
+      </label>
+      <div class="filter-group-label">Event Summary Filters</div>
+      <label class="filter-label">
+        <input type="checkbox" class="filter-summary" data-direction="INWARD" checked /> 🢃 Inward
+      </label>
+      <label class="filter-label">
+        <input type="checkbox" class="filter-summary" data-direction="OUTWARD" checked /> 🢁 Outward
+      </label>
+      <label class="filter-label">
+        <input type="checkbox" class="filter-summary" data-action="TRANSIT" checked /> ✅ Transit
+      </label>
+      <label class="filter-label">
+        <input type="checkbox" class="filter-summary" data-action="PEEK" checked /> 👀 Peek
+      </label>
+      <label class="filter-label">
+        <input type="checkbox" class="filter-summary" data-action="DENY" checked /> ⛔ Deny
+      </label>
+      <label class="filter-label">
+        <input type="checkbox" class="filter-summary" data-nosummary="true" checked /> No Summary
       </label>
     </div>
   </header>

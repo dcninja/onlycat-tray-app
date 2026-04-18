@@ -9,6 +9,7 @@ class WindowManager {
   private tokenDialog: BrowserWindow | null = null;
   private activityWindow: BrowserWindow | null = null;
   private videoWindow: BrowserWindow | null = null;
+  private notificationSettingsWindow: BrowserWindow | null = null;
 
   openTokenDialog(): void {
     if (this.tokenDialog && !this.tokenDialog.isDestroyed()) {
@@ -72,6 +73,42 @@ class WindowManager {
     this.activityWindow.on('closed', () => {
       this.activityWindow = null;
     });
+  }
+
+  openNotificationSettings(): void {
+    if (this.notificationSettingsWindow && !this.notificationSettingsWindow.isDestroyed()) {
+      this.notificationSettingsWindow.focus();
+      return;
+    }
+
+    this.notificationSettingsWindow = new BrowserWindow({
+      width: 380,
+      height: 670,
+      resizable: false,
+      title: 'OnlyCat — Notification Settings',
+      autoHideMenuBar: true,
+      icon: APP_ICON,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        preload: path.join(DIST_ROOT, 'dist/renderer/renderer/notification-settings/preload.js'),
+      },
+    });
+
+    this.notificationSettingsWindow.loadFile(
+      path.join(DIST_ROOT, 'dist/renderer/renderer/notification-settings/index.html')
+    );
+
+    this.notificationSettingsWindow.on('closed', () => {
+      this.notificationSettingsWindow = null;
+    });
+  }
+
+  closeNotificationSettings(): void {
+    if (this.notificationSettingsWindow && !this.notificationSettingsWindow.isDestroyed()) {
+      this.notificationSettingsWindow.close();
+      this.notificationSettingsWindow = null;
+    }
   }
 
   openVideoWindow(deviceId: string, eventId: number): void {

@@ -14,12 +14,17 @@ declare global {
       onEventsList?: (cb: (events: DeviceEvent[]) => void) => void;
       onEventsLoadMoreResult?: (cb: (events: DeviceEvent[]) => void) => void;
       onEventPrepend?: (cb: (event: DeviceEvent) => void) => void;
+      onKnownRfids?: (cb: (cache: Record<string, string>) => void) => void;
       // video-window
       signalReady?: () => void;
       requestRetry?: (deviceId: string, eventId: number) => void;
       onVideoOpen?: (cb: (payload: VideoOpenPayload) => void) => void;
       onEventData?: (cb: (event: DeviceEvent) => void) => void;
       onEventUpdate?: (cb: (event: DeviceEvent) => void) => void;
+      // notification-settings
+      getSettings?: () => Promise<import('../main/SettingsStore').NotificationSettings>;
+      saveSettings?: (s: import('../main/SettingsStore').NotificationSettings) => Promise<void>;
+      close?: () => void;
     };
   }
 }

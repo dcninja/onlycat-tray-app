@@ -16,3 +16,28 @@ export function triggerSourceLabel(source?: number): string {
     default: return 'Unknown';
   }
 }
+
+export function directionEmoji(direction: string): string {
+  switch (direction.toUpperCase()) {
+    case 'INWARD':  return '🢃';
+    case 'OUTWARD': return '🢁';
+    default: return '';
+  }
+}
+
+export function actionEmoji(action: string): string {
+  switch (action.toUpperCase()) {
+    case 'PEEK':    return '👀';
+    case 'DENY':    return '⛔';
+    case 'TRANSIT': return '✅';
+    default: return '';
+  }
+}
+
+export function formatSubevent(direction: string, action: string): string {
+  const dEmoji = directionEmoji(direction);
+  const aEmoji = actionEmoji(action);
+  const dir = direction === 'INWARD' ? 'In' : direction === 'OUTWARD' ? 'Out' : direction;
+  const act = action.charAt(0) + action.slice(1).toLowerCase();
+  return `${dEmoji} ${dir} ${aEmoji} ${act}`.trim();
+}

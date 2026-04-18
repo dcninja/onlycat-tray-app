@@ -6,11 +6,16 @@ const emptyMsg = document.getElementById('empty-msg') as HTMLParagraphElement;
 const tabs = document.querySelectorAll<HTMLButtonElement>('.tab');
 const searchInput = document.getElementById('search-input') as HTMLInputElement;
 const filterChecks = document.querySelectorAll<HTMLInputElement>('.filter-check');
+const filterSummary = document.querySelectorAll<HTMLInputElement>('.filter-summary');
 
 let allEvents: DeviceEvent[] = [];
-let activeTab: 'video' | 'all' = 'video';
+let activeTab: 'video' | 'all' | 'unknown' = 'video';
 let searchTerm = '';
-let activeClassifications: Set<number> = new Set([0, 1, 2, 3]);
+let activeClassifications: Set<number> = new Set([0, 1, 3]);
+let activeDirections: Set<string> = new Set(['INWARD', 'OUTWARD']);
+let activeActions: Set<string> = new Set(['TRANSIT', 'PEEK', 'DENY']);
+let showNoSummary = true;
+let knownRfids: Record<string, string> = {};
 
 function formatTime(iso: string): string {
   try {
@@ -24,21 +29,38 @@ function formatTime(iso: string): string {
 }
 
 function visibleEvents(): DeviceEvent[] {
-  let events = activeTab === 'video'
-    ? allEvents.filter(e => e.posterFrameIndex != null)
-    : allEvents;
+  let events = allEvents;
+
+  if (activeTab === 'video') {
+    events = events.filter(e => e.posterFrameIndex != null);
+  } else if (activeTab === 'unknown') {
+    // Show only events where at least one RFID code is not in the known cache
+    events = events.filter(e => {
+      if (!e.rfidCodes?.length) return true; // no RFID = unknown
+      return e.rfidCodes.some(code => !knownRfids[code]);
+    });
+  }
 
   if (searchTerm) {
     const term = searchTerm.toLowerCase();
-    events = events.filter(e =>
-      (e.catName ?? '').toLowerCase().includes(term)
-    );
+    events = events.filter(e => (e.catName ?? '').toLowerCase().includes(term));
   }
 
-  // Apply classification filters
   events = events.filter(e => {
     const cls = e.eventClassification ?? 0;
     return activeClassifications.has(cls);
+  });
+
+  // Summary filters — only filter events that have summary data
+  // Events without summary data are controlled by the "No Summary" checkbox
+  events = events.filter(e => {
+    const lastSub = e.subevents?.[e.subevents.length - 1];
+    if (!lastSub) return showNoSummary;
+    // If direction filter is active and doesn't match, hide
+    if (activeDirections.size < 2 && !activeDirections.has(lastSub.direction)) return false;
+    // If action filter is active and doesn't match, hide
+    if (activeActions.size < 2 && !activeActions.has(lastSub.action)) return false;
+    return true;
   });
 
   return events;
@@ -69,6 +91,7 @@ function renderEvent(event: DeviceEvent): HTMLLIElement {
       <span class="event-device">${event.deviceName ?? event.deviceId}</span>
       ${classificationBadge(event.eventClassification)}
       ${event.catName ? `<span class="event-type">${event.catName}</span>` : ''}
+      ${event.summary ? `<span class="event-summary">${event.summary}</span>` : ''}
       <span class="event-type event-meta">src:${event.eventTriggerSource ?? '?'} cls:${event.eventClassification ?? '?'}</span>
       <span class="event-time">${formatTime(event.createdAt ?? '')}</span>
     </div>
@@ -112,7 +135,7 @@ tabs.forEach(tab => {
   tab.addEventListener('click', () => {
     tabs.forEach(t => t.classList.remove('active'));
     tab.classList.add('active');
-    activeTab = tab.dataset.tab as 'video' | 'all';
+    activeTab = tab.dataset.tab as 'video' | 'all' | 'unknown';
     renderList();
   });
 });
@@ -133,6 +156,31 @@ filterChecks.forEach(checkbox => {
     );
     renderList();
   });
+});
+
+// Summary filters
+filterSummary.forEach(checkbox => {
+  checkbox.addEventListener('change', () => {
+    activeDirections = new Set(
+      Array.from(filterSummary)
+        .filter(c => c.checked && c.dataset.direction)
+        .map(c => c.dataset.direction!)
+    );
+    activeActions = new Set(
+      Array.from(filterSummary)
+        .filter(c => c.checked && c.dataset.action)
+        .map(c => c.dataset.action!)
+    );
+    const noSummaryCheck = document.querySelector<HTMLInputElement>('.filter-summary[data-nosummary]');
+    showNoSummary = noSummaryCheck?.checked ?? true;
+    renderList();
+  });
+});
+
+// Known RFIDs from main process
+window.onlycat.onKnownRfids!((cache: Record<string, string>) => {
+  knownRfids = cache;
+  if (activeTab === 'unknown') renderList();
 });
 
 // IPC listeners

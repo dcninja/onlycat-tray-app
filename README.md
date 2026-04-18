@@ -10,15 +10,19 @@ A cross-platform desktop system tray application for [OnlyCat](https://onlycat.c
 ## Features
 
 - **System tray icon** — runs silently in the background with a badge showing missed events
-- **Real-time notifications** — desktop notification when your cat is detected, with cat name, time, and event classification (Entry Allowed, Exit Allowed, Contraband Detected)
+- **Real-time notifications** — desktop notification when your cat is detected, with cat name, time, and event classification (Entry Allowed, Contraband Detected)
 - **Recent Activity window** — browse your full event history with thumbnails, cat names, and timestamps
-  - Two tabs: Video Movement Events / All Events
+  - Three tabs: Video Movement Events / All Events / Unknown Cats
   - Search by cat name
   - Filter by event classification
+  - Filter by direction (🢃 Inward / 🢁 Outward) and action (✅ Transit / 👀 Peek / ⛔ Deny)
   - Share event URL with one click
+- **Event summaries** — direction and action shown per event with emoji indicators
 - **Video viewer** — click any event or notification to open the full event video
 - **Door Policy control** — switch between door policies directly from the tray menu
 - **Device status** — see online/offline status and uptime for each device
+- **Notification Settings** — dedicated settings window to configure exactly which events trigger notifications (classification, direction, action, video-only)
+- **Unknown Cats** — identify events from unregistered RFID chips
 - **Auto-reconnect** — automatically reconnects if the connection drops
 - **Check for Updates** — checks GitHub releases for newer versions
 
@@ -70,21 +74,30 @@ Your token is stored securely using your OS keychain (or encrypted local storage
 - **Sign Out** — clears your stored token
 
 ### Recent Activity
-- Browse all events with thumbnails, cat names, and timestamps
-- Switch between **Video Movement Events** (events with video) and **All Events**
+- Browse all events with thumbnails, cat names, timestamps, and event summary (direction + action)
+- Switch between **Video Movement Events**, **All Events**, and **Unknown Cats** tabs
+- **Unknown Cats** — shows events with RFID codes not in your saved cat name cache
 - Search by cat name using the search box
-- Filter by classification using the checkboxes
+- Filter by classification, direction (🢃/🢁) and action (✅/👀/⛔) using the checkboxes
 - Click an event to open the video
 - Click 🔗 to copy the shareable event URL
 
 ### Notifications
 When a new event is detected you'll receive a desktop notification showing:
-- Device name and classification (🟢 Entry Allowed / 🔵 Exit Allowed / 🔴 Contraband Detected)
+- Device name and classification (🟢 Entry Allowed / 🔴 Contraband Detected)
 - Cat name (if RFID chip detected)
-- Time of event
+- Time of event and event summary (e.g. 🢃 In ✅ Transit)
 - Thumbnail image (macOS/Windows)
 
 Click the notification to open the event video directly.
+
+### Notification Settings
+Click **⚙ Notification Settings** in the tray menu to configure:
+- Video movement only toggle
+- Event classification filters
+- Direction filters (Inward/Outward)
+- Action filters (Transit, Peek, Deny)
+- Events without summary data
 
 ---
 

@@ -10,6 +10,7 @@ type OnTestNotification = () => void;
 type OnToggleVideoOnly = () => void;
 type OnCheckUpdate = () => void;
 type OnActivatePolicy = (deviceId: string, policyId: number) => void;
+type OnCheckNotificationSettings = () => void;
 
 class TrayManager {
   private tray: Tray | null = null;
@@ -24,6 +25,7 @@ class TrayManager {
   private onToggleVideoOnly: OnToggleVideoOnly = () => {};
   private onCheckUpdate: OnCheckUpdate = () => {};
   private onActivatePolicy: OnActivatePolicy = () => {};
+  private onCheckNotificationSettings: OnCheckNotificationSettings = () => {};
   private notifyOnVideoOnly: boolean = true;
   private updateAvailableVersion: string | null = null;
   private transitPolicies: Map<string, import('../shared/types').DeviceTransitPolicy[]> = new Map();
@@ -36,6 +38,7 @@ class TrayManager {
     onToggleVideoOnly: OnToggleVideoOnly;
     onCheckUpdate: OnCheckUpdate;
     onActivatePolicy: OnActivatePolicy;
+    onCheckNotificationSettings: OnCheckNotificationSettings;
     notifyOnVideoOnly: boolean;
   }): void {
     this.onActivityClick = callbacks.onActivityClick;
@@ -45,6 +48,7 @@ class TrayManager {
     this.onToggleVideoOnly = callbacks.onToggleVideoOnly;
     this.onCheckUpdate = callbacks.onCheckUpdate;
     this.onActivatePolicy = callbacks.onActivatePolicy;
+    this.onCheckNotificationSettings = callbacks.onCheckNotificationSettings;
     this.notifyOnVideoOnly = callbacks.notifyOnVideoOnly;
 
     // Use the cat icon from assets
@@ -162,8 +166,8 @@ class TrayManager {
       }
     }    template.push({ type: 'separator' });
     template.push({
-      label: `${this.notifyOnVideoOnly ? '✓' : '○'} Notify only on Video Movement`,
-      click: () => this.onToggleVideoOnly(),
+      label: `⚙ Notification Settings`,
+      click: () => this.onCheckNotificationSettings(),
     });
     template.push({ type: 'separator' });
     template.push({ label: '🔔 Test Notification', click: () => this.onTestNotification() });

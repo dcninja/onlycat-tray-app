@@ -8,6 +8,7 @@ const EVENTS_LOAD_MORE_RESULT = 'events:load-more-result';
 const EVENTS_PREPEND = 'events:prepend';
 const VIDEO_OPEN = 'video:open';
 const COPY_URL = 'copy:url';
+const KNOWN_RFIDS = 'known-rfids';
 
 contextBridge.exposeInMainWorld('onlycat', {
   loadMore: (beforeGlobalId?: number) =>
@@ -24,5 +25,8 @@ contextBridge.exposeInMainWorld('onlycat', {
   },
   onEventPrepend: (cb: (event: DeviceEvent) => void) => {
     ipcRenderer.on(EVENTS_PREPEND, (_e, event: DeviceEvent) => cb(event));
+  },
+  onKnownRfids: (cb: (cache: Record<string, string>) => void) => {
+    ipcRenderer.on(KNOWN_RFIDS, (_e, cache: Record<string, string>) => cb(cache));
   },
 });

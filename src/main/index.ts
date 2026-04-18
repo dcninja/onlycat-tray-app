@@ -6,7 +6,7 @@ import windowManager from './WindowManager';
 import notificationManager from './NotificationManager';
 import settingsStore from './SettingsStore';
 import { checkForUpdates, openReleasePage } from './UpdateChecker';
-import { classificationLabel, triggerSourceLabel } from '../shared/eventLabels';
+import { classificationLabel, triggerSourceLabel, formatSubevent } from '../shared/eventLabels';
 import { IPC_CHANNELS } from '../shared/ipcChannels';
 import type { AuthSubmitTokenPayload, EventsLoadMorePayload } from '../shared/ipcChannels';
 import type { Device, DeviceEvent, DeviceTransitPolicy } from '../shared/types';
@@ -47,7 +47,26 @@ async function fetchAllEvents(): Promise<void> {
       const enriched = await Promise.all(page.map(async (e) => {
         const normalized = normalizeEvent(e, devices);
         const catName = await getCatName(normalized);
-        return catName ? { ...normalized, catName } : normalized;
+        let summary: string | undefined;
+        if (normalized.accessToken) {
+          try {
+            const result = await gatewayClient.request('getEventSummary', {
+              deviceId: normalized.deviceId,
+              eventId: normalized.eventId,
+              accessToken: normalized.accessToken,
+              subscribe: true,
+            }) as { subevents?: Array<{ startFrameIndex: number; endFrameIndex: number; direction: string; action: string; rfidCode: string | null }> } | null;
+
+            if (result?.subevents?.length) {
+              const subevents = result.subevents;
+              // Build human-readable summary from subevents
+              const parts = subevents.map(s => formatSubevent(s.direction, s.action));
+              summary = parts[parts.length - 1]; // show last subevent (final outcome)
+              return { ...normalized, ...(catName ? { catName } : {}), summary, subevents };
+            }
+          } catch { /* skip */ }
+        }
+        return { ...normalized, ...(catName ? { catName } : {}), ...(summary ? { summary } : {}) };
       }));
 
       allEvents.push(...enriched);
@@ -168,6 +187,7 @@ app.on('ready', async () => {
       windowManager.openVideoWindow(event.deviceId, event.eventId);
       fetchAndSendEvent(event.deviceId, event.eventId);
     },
+    onCheckNotificationSettings: () => windowManager.openNotificationSettings(),
     onToggleVideoOnly: () => {
       const newVal = !settingsStore.notifyOnVideoOnly;
       settingsStore.notifyOnVideoOnly = newVal;
@@ -194,7 +214,6 @@ app.on('ready', async () => {
         if (result?.length) {
           const event = normalizeEvent(result[0], devices);
           const catName = await getCatName(event);
-          trayManager.setUnacknowledgedEvent(event);
           await notificationManager.notify(event, event.deviceName ?? event.deviceId, catName);
         }
       } catch (err) {
@@ -350,6 +369,7 @@ ipcMain.on(IPC_CHANNELS.EVENTS_LOAD_MORE, async (_event, payload: EventsLoadMore
 
   if (eventsCached) {
     activityWin.webContents.send(IPC_CHANNELS.EVENTS_LIST, cachedEvents);
+    activityWin.webContents.send(IPC_CHANNELS.KNOWN_RFIDS, settingsStore.getRfidCache());
     return;
   }
 
@@ -369,12 +389,63 @@ ipcMain.on(IPC_CHANNELS.EVENTS_LOAD_MORE, async (_event, payload: EventsLoadMore
 
 gatewayClient.on('userEventUpdate', async (data: { type: string; body: DeviceEvent }) => {
   if (data.type !== 'create') return;
-  if (settingsStore.notifyOnVideoOnly && data.body.posterFrameIndex == null) return;
+  const ns = settingsStore.notificationSettings;
+  if (ns.videoOnly && data.body.posterFrameIndex == null) return;
 
   const event = normalizeEvent(data.body, devices);
   const deviceName = event.deviceName ?? event.deviceId;
   const catName = await getCatName(event);
-  const enriched = catName ? { ...event, catName } : event;
+
+  // Fetch event summary for direction/action
+  let enrichedEvent = catName ? { ...event, catName } : event;
+  if (event.accessToken) {
+    try {
+      const result = await gatewayClient.request('getEventSummary', {
+        deviceId: event.deviceId,
+        eventId: event.eventId,
+        accessToken: event.accessToken,
+        subscribe: true,
+      }) as { subevents?: Array<{ startFrameIndex: number; endFrameIndex: number; direction: string; action: string; rfidCode: string | null }> } | null;
+      if (result?.subevents?.length) {
+        const parts = result.subevents.map(s => formatSubevent(s.direction, s.action));
+        enrichedEvent = { ...enrichedEvent, summary: parts[parts.length - 1], subevents: result.subevents };
+      }
+    } catch { /* skip */ }
+  }
+
+  const enriched = enrichedEvent;
+
+  // Apply classification filter
+  const cls = enriched.eventClassification ?? 0;
+  if (!ns.classifications.includes(cls)) {
+    // Still cache and show in activity window, just don't notify
+    cachedEvents = [enriched, ...cachedEvents];
+    const activityWin = windowManager.getActivityWindow();
+    if (activityWin) activityWin.webContents.send(IPC_CHANNELS.EVENTS_PREPEND, enriched);
+    return;
+  }
+
+  // Apply summary filters
+  const lastSub = enriched.subevents?.[enriched.subevents.length - 1];
+  if (lastSub) {
+    if (ns.directions.length < 2 && !ns.directions.includes(lastSub.direction)) {
+      cachedEvents = [enriched, ...cachedEvents];
+      const activityWin = windowManager.getActivityWindow();
+      if (activityWin) activityWin.webContents.send(IPC_CHANNELS.EVENTS_PREPEND, enriched);
+      return;
+    }
+    if (ns.actions.length < 2 && !ns.actions.includes(lastSub.action)) {
+      cachedEvents = [enriched, ...cachedEvents];
+      const activityWin = windowManager.getActivityWindow();
+      if (activityWin) activityWin.webContents.send(IPC_CHANNELS.EVENTS_PREPEND, enriched);
+      return;
+    }
+  } else if (!ns.showNoSummary) {
+    cachedEvents = [enriched, ...cachedEvents];
+    const activityWin = windowManager.getActivityWindow();
+    if (activityWin) activityWin.webContents.send(IPC_CHANNELS.EVENTS_PREPEND, enriched);
+    return;
+  }
 
   cachedEvents = [enriched, ...cachedEvents];
   trayManager.setUnacknowledgedEvent(enriched);
@@ -383,6 +454,13 @@ gatewayClient.on('userEventUpdate', async (data: { type: string; body: DeviceEve
   const activityWin = windowManager.getActivityWindow();
   if (activityWin) activityWin.webContents.send(IPC_CHANNELS.EVENTS_PREPEND, enriched);
 });
+
+// Notification settings IPC
+ipcMain.handle('notification-settings:get', () => settingsStore.notificationSettings);
+ipcMain.handle('notification-settings:save', (_e, settings) => {
+  settingsStore.notificationSettings = settings;
+});
+ipcMain.on('notification-settings:close', () => windowManager.closeNotificationSettings());
 
 // Copy URL to clipboard
 ipcMain.on('copy:url', (_event, payload: { url: string }) => {
