@@ -112,6 +112,19 @@ async function fetchAllEvents(): Promise<void> {
 
   // Load full cache from DB
   cachedEvents = await loadAllEvents();
+  // Backfill catName from local RFID cache for events loaded from DB
+  const rfidCache = settingsStore.getRfidCache();
+  for (let i = 0; i < cachedEvents.length; i++) {
+    const e = cachedEvents[i];
+    if (!e.catName && e.rfidCodes?.length) {
+      const names = e.rfidCodes
+        .map(code => rfidCache[code])
+        .filter((n): n is string => !!n);
+      if (names.length) {
+        cachedEvents[i] = { ...e, catName: [...new Set(names)].join(' & ') };
+      }
+    }
+  }
   eventsCached = true;
   await setMeta('lastRun', new Date().toISOString());
   console.log(`fetchAllEvents: total cached events = ${cachedEvents.length}`);
@@ -581,41 +594,32 @@ gatewayClient.on('userEventUpdate', async (data: { type: string; body: DeviceEve
 
   // Apply classification filter
   const cls = enriched.eventClassification ?? 0;
-  if (!ns.classifications.includes(cls)) {
-    cacheEvent(enriched);
-    const activityWin = windowManager.getActivityWindow();
-    if (activityWin) activityWin.webContents.send(IPC_CHANNELS.EVENTS_PREPEND, enriched);
-    return;
-  }
+  const shouldNotify = ns.classifications.includes(cls);
 
-  // Apply summary filters
-  const lastSub = enriched.subevents?.[enriched.subevents.length - 1];
-  if (lastSub) {
-    if (ns.directions.length < 2 && !ns.directions.includes(lastSub.direction)) {
-      cacheEvent(enriched);
-      const activityWin = windowManager.getActivityWindow();
-      if (activityWin) activityWin.webContents.send(IPC_CHANNELS.EVENTS_PREPEND, enriched);
-      return;
+  let passedSummaryFilter = true;
+  if (shouldNotify) {
+    // Apply summary filters
+    const lastSub = enriched.subevents?.[enriched.subevents.length - 1];
+    if (lastSub) {
+      if (ns.directions.length < 2 && !ns.directions.includes(lastSub.direction)) passedSummaryFilter = false;
+      if (ns.actions.length < 3 && !ns.actions.includes(lastSub.action)) passedSummaryFilter = false;
+    } else if (!ns.showNoSummary) {
+      passedSummaryFilter = false;
     }
-    if (ns.actions.length < 3 && !ns.actions.includes(lastSub.action)) {
-      cacheEvent(enriched);
-      const activityWin = windowManager.getActivityWindow();
-      if (activityWin) activityWin.webContents.send(IPC_CHANNELS.EVENTS_PREPEND, enriched);
-      return;
-    }
-  } else if (!ns.showNoSummary) {
-    cacheEvent(enriched);
-    const activityWin = windowManager.getActivityWindow();
-    if (activityWin) activityWin.webContents.send(IPC_CHANNELS.EVENTS_PREPEND, enriched);
-    return;
   }
 
   cacheEvent(enriched);
-  trayManager.setUnacknowledgedEvent(enriched);
-  notificationManager.notify(enriched, deviceName, catName);
+
+  if (shouldNotify && passedSummaryFilter) {
+    trayManager.setUnacknowledgedEvent(enriched);
+    notificationManager.notify(enriched, deviceName, catName);
+  }
 
   const activityWin = windowManager.getActivityWindow();
-  if (activityWin) activityWin.webContents.send(IPC_CHANNELS.EVENTS_PREPEND, enriched);
+  if (activityWin) {
+    activityWin.webContents.send(IPC_CHANNELS.EVENTS_PREPEND, enriched);
+    activityWin.webContents.send(IPC_CHANNELS.KNOWN_RFIDS, settingsStore.getRfidCache());
+  }
 });
 
 // Favourite toggle

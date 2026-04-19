@@ -7,6 +7,10 @@
   - Summaries fetched from API were discarded during cache dedup before reaching the renderer
   - Backfill now runs before filtering, and updated events are re-sent to the activity window
   - Updated summaries are also persisted to SQLite so they survive future restarts
+- Unknown Cats tab incorrectly showing known cats (e.g. Roxy)
+  - Events without `rfidCodes` on the event object now also check subevent RFID codes from event summaries
+  - Cat names are backfilled from the local RFID cache when loading events from SQLite
+  - RFID cache is now sent to the renderer after live events arrive
 
 ## [1.5.0] - 2026-04-19
 

@@ -34,10 +34,16 @@ function visibleEvents(): DeviceEvent[] {
   if (activeTab === 'video') {
     events = events.filter(e => e.posterFrameIndex != null);
   } else if (activeTab === 'unknown') {
-    // Show only events where at least one RFID code is not in the known cache
     events = events.filter(e => {
-      if (!e.rfidCodes?.length) return true; // no RFID = unknown
-      return e.rfidCodes.some(code => !knownRfids[code]);
+      if (e.catName) return false;
+      // Check subevents for RFID codes if the event itself has none
+      const rfids = e.rfidCodes?.length
+        ? e.rfidCodes
+        : (e.subevents?.map(s => s.rfidCode).filter((c): c is string => !!c) ?? []);
+      if (!rfids.length) return true; // no RFID anywhere = unknown
+      // If all RFID codes are known, this isn't an unknown cat
+      const allKnown = rfids.every(code => knownRfids[code]);
+      return !allKnown;
     });
   } else if (activeTab === 'favourites') {
     events = events.filter(e => e.favourite === true);
