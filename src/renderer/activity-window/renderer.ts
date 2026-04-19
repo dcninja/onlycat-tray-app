@@ -9,7 +9,7 @@ const filterChecks = document.querySelectorAll<HTMLInputElement>('.filter-check'
 const filterSummary = document.querySelectorAll<HTMLInputElement>('.filter-summary');
 
 let allEvents: DeviceEvent[] = [];
-let activeTab: 'video' | 'all' | 'unknown' = 'video';
+let activeTab: 'video' | 'all' | 'unknown' | 'favourites' = 'video';
 let searchTerm = '';
 let activeClassifications: Set<number> = new Set([0, 1, 3]);
 let activeDirections: Set<string> = new Set(['INWARD', 'OUTWARD']);
@@ -39,6 +39,8 @@ function visibleEvents(): DeviceEvent[] {
       if (!e.rfidCodes?.length) return true; // no RFID = unknown
       return e.rfidCodes.some(code => !knownRfids[code]);
     });
+  } else if (activeTab === 'favourites') {
+    events = events.filter(e => e.favourite === true);
   }
 
   if (searchTerm) {
@@ -96,6 +98,7 @@ function renderEvent(event: DeviceEvent): HTMLLIElement {
       <span class="event-time">${formatTime(event.createdAt ?? '')}</span>
     </div>
     <button class="share-btn" title="Copy link">🔗</button>
+    <button class="fav-btn" title="Favourite">${event.favourite ? '⭐' : '☆'}</button>
   `;
 
   li.addEventListener('click', (e) => {
@@ -112,6 +115,14 @@ function renderEvent(event: DeviceEvent): HTMLLIElement {
       shareBtn.textContent = '✓';
       setTimeout(() => { shareBtn.textContent = '🔗'; }, 2000);
     }
+  });
+
+  const favBtn = li.querySelector('.fav-btn') as HTMLButtonElement;
+  favBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const isFav = await window.onlycat.toggleFavourite!(event.globalId);
+    event.favourite = isFav;
+    favBtn.textContent = isFav ? '⭐' : '☆';
   });
 
   return li;
@@ -135,7 +146,7 @@ tabs.forEach(tab => {
   tab.addEventListener('click', () => {
     tabs.forEach(t => t.classList.remove('active'));
     tab.classList.add('active');
-    activeTab = tab.dataset.tab as 'video' | 'all' | 'unknown';
+    activeTab = tab.dataset.tab as 'video' | 'all' | 'unknown' | 'favourites';
     renderList();
   });
 });
@@ -187,7 +198,8 @@ window.onlycat.onKnownRfids!((cache: Record<string, string>) => {
 window.onlycat.onEventsList!((events: DeviceEvent[]) => {
   allEvents = events;
   renderList();
-  loadMoreBtn.hidden = true; // all events loaded at once
+  loadMoreBtn.disabled = events.length === 0;
+  loadMoreBtn.hidden = false;
 });
 
 window.onlycat.onEventsLoadMoreResult!((events: DeviceEvent[]) => {

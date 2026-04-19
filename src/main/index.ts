@@ -10,7 +10,7 @@ import { classificationLabel, triggerSourceLabel, formatSubevent } from '../shar
 import { IPC_CHANNELS } from '../shared/ipcChannels';
 import type { AuthSubmitTokenPayload, EventsLoadMorePayload } from '../shared/ipcChannels';
 import type { Device, DeviceEvent, DeviceTransitPolicy } from '../shared/types';
-import { saveEvents, loadAllEvents, getLatestGlobalId, getEventCount, setMeta, getMeta } from './EventDatabase';
+import { saveEvents, loadAllEvents, getLatestGlobalId, getEventCount, setMeta, getMeta, toggleFavourite, loadFavourites, clearAllEvents } from './EventDatabase';
 
 // Set app name before ready so OS notifications show "OnlyCat" not "Electron"
 app.setName('OnlyCat');
@@ -343,6 +343,7 @@ function handleSignOut(): void {
   devices = [];
   cachedEvents = [];
   eventsCached = false;
+  clearAllEvents().catch(console.error);
   trayManager.setDevices([]);
   trayManager.setConnectionState('disconnected');
   trayManager.setUnacknowledgedEvent(null);
@@ -383,15 +384,14 @@ gatewayClient.on('connected', () => {
         trayManager.setDevices(devices);
         // Fetch transit policies for each device
         await fetchTransitPolicies();
+        // Load cached events from DB for fast UI
         if (!eventsCached) {
-          // Pre-load from DB immediately so UI is fast, then fetch new events from API
           loadAllEvents().then(stored => {
-            if (stored.length > 0 && !eventsCached) {
+            if (stored.length > 0) {
               cachedEvents = stored;
               eventsCached = true;
             }
           }).catch(console.error);
-          setTimeout(() => fetchAllEvents().catch(console.error), 1000);
         }
       })
       .catch((err) => console.error('getDevices (reconnect) failed', err));
@@ -418,21 +418,105 @@ ipcMain.on(IPC_CHANNELS.EVENTS_LOAD_MORE, async (_event, payload: EventsLoadMore
   const activityWin = windowManager.getActivityWindow();
   if (!activityWin) return;
 
-  if (eventsCached) {
+  const isInitialLoad = !payload.beforeGlobalId;
+
+  // On initial load, send cached events immediately for instant UI
+  if (isInitialLoad && cachedEvents.length > 0) {
     activityWin.webContents.send(IPC_CHANNELS.EVENTS_LIST, cachedEvents);
     activityWin.webContents.send(IPC_CHANNELS.KNOWN_RFIDS, settingsStore.getRfidCache());
-    return;
   }
 
+  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const allFetched: DeviceEvent[] = [];
+  // On initial load with cache, start from the newest cached event to only fetch new ones
+  const newestCachedId = isInitialLoad && cachedEvents.length > 0
+    ? Math.max(...cachedEvents.map(e => e.globalId))
+    : undefined;
+  let cursor: number | undefined = payload.beforeGlobalId;
+
   try {
-    const result = await gatewayClient.request('getEvents', { subscribe: true });
-    const normalized = (result as DeviceEvent[]).map(e => normalizeEvent(e, devices));
-    const enriched = await Promise.all(normalized.map(async (event) => {
-      const catName = await getCatName(event);
-      return catName ? { ...event, catName } : event;
-    }));
-    activityWin.webContents.send(IPC_CHANNELS.EVENTS_LIST, enriched);
-    fetchAllEvents().catch(console.error);
+    // Fetch pages until we have 3 days of data (initial) or one page (load more)
+    while (true) {
+      const requestPayload = cursor
+        ? { beforeGlobalId: cursor }
+        : { subscribe: true };
+
+      const page = await gatewayClient.request('getEvents', requestPayload) as DeviceEvent[];
+      if (!page?.length) break;
+
+      const enriched = await Promise.all(page.map(async (e) => {
+        // Check if we already have this event cached with summary data
+        const cached = cachedEvents.find(c => c.globalId === e.globalId);
+        if (cached?.summary) return cached;
+
+        const normalized = normalizeEvent(e, devices);
+        const catName = await getCatName(normalized);
+        let summary: string | undefined;
+        let subevents: DeviceEvent['subevents'];
+        if (normalized.accessToken) {
+          try {
+            const summaryResult = await gatewayClient.request('getEventSummary', {
+              deviceId: normalized.deviceId,
+              eventId: normalized.eventId,
+              accessToken: normalized.accessToken,
+              subscribe: true,
+            }) as { subevents?: Array<{ startFrameIndex: number; endFrameIndex: number; direction: string; action: string; rfidCode: string | null }> } | null;
+            if (summaryResult?.subevents?.length) {
+              const parts = summaryResult.subevents.map(s => formatSubevent(s.direction, s.action));
+              summary = parts[parts.length - 1];
+              subevents = summaryResult.subevents;
+            }
+          } catch { /* skip */ }
+        }
+        return { ...normalized, ...(catName ? { catName } : {}), ...(summary ? { summary, subevents } : {}) };
+      }));
+
+      allFetched.push(...enriched);
+      cursor = page[page.length - 1].globalId;
+
+      // On initial load, keep fetching until we have 3 days of data
+      if (isInitialLoad) {
+        // If we have a cache, stop when we reach events we already have
+        if (newestCachedId && page.some(e => e.globalId <= newestCachedId)) {
+          // Filter out events we already have
+          const newOnly = allFetched.filter(e => !cachedEvents.some(c => c.globalId === e.globalId));
+          allFetched.length = 0;
+          allFetched.push(...newOnly);
+          break;
+        }
+        const oldestTimestamp = enriched[enriched.length - 1]?.createdAt ?? enriched[enriched.length - 1]?.timestamp;
+        if (oldestTimestamp && oldestTimestamp < oneDayAgo) break;
+        if (page.length < 20) break;
+        await new Promise(r => setTimeout(r, 200)); // throttle
+      } else {
+        break; // Load More just fetches one page
+      }
+    }
+
+    // Cache to SQLite
+    if (allFetched.length) saveEvents(allFetched).catch(console.error);
+
+    // Add to in-memory cache (dedup by globalId)
+    const existingIds = new Set(cachedEvents.map(e => e.globalId));
+    const newEvents = allFetched.filter(e => !existingIds.has(e.globalId));
+    cachedEvents = [...cachedEvents, ...newEvents];
+    eventsCached = true;
+
+    if (payload.beforeGlobalId) {
+      if (allFetched.length > 0) {
+        activityWin.webContents.send(IPC_CHANNELS.EVENTS_LOAD_MORE_RESULT, allFetched);
+      }
+    } else if (isInitialLoad && cachedEvents.length > 0 && allFetched.length > 0) {
+      // Had cache, fetched new events — prepend each new one
+      for (const event of allFetched.reverse()) {
+        activityWin.webContents.send(IPC_CHANNELS.EVENTS_PREPEND, event);
+      }
+    } else if (!isInitialLoad || cachedEvents.length === 0) {
+      // No cache — send whatever we fetched (could be empty on no events)
+      activityWin.webContents.send(IPC_CHANNELS.EVENTS_LIST, allFetched);
+    }
+    // If we had cache and no new events, do nothing — cached events already shown
+    activityWin.webContents.send(IPC_CHANNELS.KNOWN_RFIDS, settingsStore.getRfidCache());
   } catch (err) {
     console.error('getEvents failed', err);
   }
@@ -503,6 +587,42 @@ gatewayClient.on('userEventUpdate', async (data: { type: string; body: DeviceEve
 
   const activityWin = windowManager.getActivityWindow();
   if (activityWin) activityWin.webContents.send(IPC_CHANNELS.EVENTS_PREPEND, enriched);
+});
+
+// Favourite toggle
+ipcMain.handle('event:toggle-favourite', async (_e, globalId: number) => {
+  const isFav = await toggleFavourite(globalId);
+  // Update in-memory cache
+  cachedEvents = cachedEvents.map(e => e.globalId === globalId ? { ...e, favourite: isFav } : e);
+  return isFav;
+});
+
+// Token management IPC
+ipcMain.handle('settings:get-token', () => tokenStore.load());
+ipcMain.handle('settings:update-token', async (_e, token: string) => {
+  return new Promise<{ success: boolean; error?: string }>((resolve) => {
+    const onConnected = () => {
+      cleanup();
+      tokenStore.save(token);
+      // Clear old cache since it belongs to a different account
+      cachedEvents = [];
+      eventsCached = false;
+      clearAllEvents().catch(console.error);
+      trayManager.setConnectionState('connected');
+      resolve({ success: true });
+    };
+    const onConnectError = (error: Error) => {
+      cleanup();
+      resolve({ success: false, error: error?.message ?? 'Authentication failed' });
+    };
+    const cleanup = () => {
+      gatewayClient.off('connected', onConnected);
+      gatewayClient.off('connect_error', onConnectError);
+    };
+    gatewayClient.once('connected', onConnected);
+    gatewayClient.once('connect_error', onConnectError);
+    gatewayClient.connect(token);
+  });
 });
 
 // Notification settings IPC

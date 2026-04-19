@@ -166,7 +166,7 @@ class TrayManager {
       }
     }    template.push({ type: 'separator' });
     template.push({
-      label: `⚙ Notification Settings`,
+      label: `⚙ Settings`,
       click: () => this.onCheckNotificationSettings(),
     });
     template.push({ type: 'separator' });

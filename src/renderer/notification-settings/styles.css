@@ -46,6 +46,44 @@ h2 {
   cursor: pointer;
 }
 
+.token-row {
+  display: flex;
+  gap: 8px;
+}
+
+.token-row input {
+  flex: 1;
+  padding: 7px 10px;
+  border-radius: 6px;
+  border: 1px solid #333;
+  background: #0f0f1a;
+  color: #e0e0e0;
+  font-size: 0.85rem;
+  outline: none;
+}
+
+.token-row input:focus { border-color: #5c6bc0; }
+
+.small-btn {
+  padding: 7px 14px;
+  border-radius: 6px;
+  border: none;
+  background: #5c6bc0;
+  color: #fff;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.small-btn:hover { background: #3f51b5; }
+
+.msg {
+  font-size: 0.8rem;
+  margin-top: 4px;
+}
+
+.msg.success { color: #69f0ae; }
+.msg.error { color: #ff8a80; }
+
 .toggle-label input[type="checkbox"] {
   accent-color: #5c6bc0;
   width: 16px;

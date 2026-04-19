@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.4.0] - 2026-04-19
+
+### Added
+- **Favourites** — star button (⭐/☆) on each event card to mark favourites, persisted in SQLite (thanks @Alex-Ala, @Zone-MR)
+- **Favourites tab** in Recent Activity — shows only starred events
+- **Load More button restored** — events fetched one page at a time instead of full history on startup
+  - Each page is cached to SQLite as it's loaded
+  - Previously cached events load instantly from DB on startup
+  - Dramatically reduces API strain for large event histories
+- **General Settings page** — renamed from Notification Settings, now includes device token management (thanks @TeslaTap)
+  - View and change device token without signing out
+  - Token update reconnects automatically
+- **Event summary caching** — `getEventSummary` results cached in SQLite, skipped on subsequent loads
+- **Cache cleared on token change** — event DB wiped when signing out or changing token
+
+### Changed
+- Token input is now visible text (not masked) for easier entry (thanks @TeslaTap)
+- Activity window height increased by 200px
+- Settings window renamed from "Notification Settings" to "Settings"
+- Removed automatic full event history fetch on startup
+- Events are now cached incrementally as the user browses
+- Initial load fetches last 24 hours of events (thanks @Alex-Ala, @Zone-MR)
+
 ## [1.3.1] - 2026-04-18
 
 ### Added

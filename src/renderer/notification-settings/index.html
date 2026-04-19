@@ -4,14 +4,23 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'" />
-  <title>OnlyCat — Notification Settings</title>
+  <title>OnlyCat — Settings</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header><h1>Notification Settings</h1></header>
+  <header><h1>Settings</h1></header>
   <main>
     <section>
-      <h2>General</h2>
+      <h2>Device Token</h2>
+      <div class="token-row">
+        <input type="text" id="token-input" placeholder="Device token" autocomplete="off" />
+        <button id="token-save-btn" class="small-btn">Update</button>
+      </div>
+      <p id="token-msg" class="msg" hidden></p>
+    </section>
+
+    <section>
+      <h2>Notifications</h2>
       <label class="toggle-label">
         <input type="checkbox" id="video-only" />
         Only notify for events with video movement

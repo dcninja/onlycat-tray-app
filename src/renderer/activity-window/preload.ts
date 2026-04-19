@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld('onlycat', {
     ipcRenderer.send(VIDEO_OPEN, { deviceId, eventId }),
   copyUrl: (url: string) =>
     ipcRenderer.send(COPY_URL, { url }),
+  toggleFavourite: (globalId: number) =>
+    ipcRenderer.invoke('event:toggle-favourite', globalId),
   onEventsList: (cb: (events: DeviceEvent[]) => void) => {
     ipcRenderer.on(EVENTS_LIST, (_e, events: DeviceEvent[]) => cb(events));
   },

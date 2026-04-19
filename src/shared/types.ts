@@ -39,6 +39,7 @@ export interface DeviceEvent {
   videoUrl?: string;
   thumbnailUrl?: string;
   summary?: string;         // from getEventSummary (display text)
+  favourite?: boolean;       // local favourite flag
   subevents?: Array<{
     startFrameIndex: number;
     endFrameIndex: number;

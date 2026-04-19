@@ -7,6 +7,9 @@ const dirChecks = document.querySelectorAll<HTMLInputElement>('.dir-check');
 const actChecks = document.querySelectorAll<HTMLInputElement>('.act-check');
 const saveBtn = document.getElementById('save-btn') as HTMLButtonElement;
 const cancelBtn = document.getElementById('cancel-btn') as HTMLButtonElement;
+const tokenInput = document.getElementById('token-input') as HTMLInputElement;
+const tokenSaveBtn = document.getElementById('token-save-btn') as HTMLButtonElement;
+const tokenMsg = document.getElementById('token-msg') as HTMLParagraphElement;
 
 // Load current settings
 window.onlycat.getSettings!().then((settings: NotificationSettings) => {
@@ -17,6 +20,37 @@ window.onlycat.getSettings!().then((settings: NotificationSettings) => {
   actChecks.forEach(c => { c.checked = settings.actions.includes(c.dataset.act ?? ''); });
 });
 
+// Load current token
+(window.onlycat as any).getToken().then((token: string | null) => {
+  if (token) tokenInput.value = token;
+});
+
+// Token update
+tokenSaveBtn.addEventListener('click', async () => {
+  const token = tokenInput.value.trim();
+  if (!token) return;
+  tokenMsg.hidden = true;
+  tokenSaveBtn.disabled = true;
+  tokenSaveBtn.textContent = 'Updating...';
+  try {
+    const result = await (window.onlycat as any).updateToken(token);
+    if (result.success) {
+      tokenMsg.textContent = 'Token updated and reconnected.';
+      tokenMsg.className = 'msg success';
+    } else {
+      tokenMsg.textContent = result.error || 'Failed to connect with this token.';
+      tokenMsg.className = 'msg error';
+    }
+  } catch {
+    tokenMsg.textContent = 'Failed to update token.';
+    tokenMsg.className = 'msg error';
+  }
+  tokenMsg.hidden = false;
+  tokenSaveBtn.disabled = false;
+  tokenSaveBtn.textContent = 'Update';
+});
+
+// Save notification settings
 saveBtn.addEventListener('click', async () => {
   const settings: NotificationSettings = {
     videoOnly: videoOnly.checked,

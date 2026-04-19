@@ -9,6 +9,7 @@ A cross-platform desktop system tray application for [OnlyCat](https://onlycat.c
 
 ## Features
 
+- **Favourites** — star events to save them locally, view in the Favourites tab
 - **SQLite event database** — events cached locally between sessions; only new events fetched on subsequent startups
 - **System tray icon** — runs silently in the background with a badge showing missed events
 - **Real-time notifications** — desktop notification when your cat is detected, with cat name, time, and event classification (Entry Allowed, Contraband Detected)
@@ -56,7 +57,7 @@ sudo dpkg -i onlycat-tray-app_*.deb
 ## First Run
 
 1. Launch the app — it will appear in your system tray
-2. Click the tray icon and you'll be prompted to enter your **Device Token**
+2. Right-click the tray icon and you'll be prompted to enter your **Device Token**
 3. Find your device token in the OnlyCat app under device settings
 4. Once connected, your devices and recent activity will be available from the tray
 
@@ -89,7 +90,7 @@ When a new event is detected you'll receive a desktop notification showing:
 - Cat name (if RFID chip detected)
 - Time of event
 - Event summary with emojis on a new line (e.g. 🢃 In ✅ Transit)
-- Thumbnail image (macOS/Windows)
+- Thumbnail image
 
 Click the notification to open the event video directly.
 

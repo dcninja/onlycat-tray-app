@@ -55,7 +55,7 @@ class WindowManager {
 
     this.activityWindow = new BrowserWindow({
       width: 500,
-      height: 700,
+      height: 900,
       title: 'OnlyCat — Recent Activity',
       autoHideMenuBar: true,
       icon: APP_ICON,
@@ -83,7 +83,7 @@ class WindowManager {
 
     this.notificationSettingsWindow = new BrowserWindow({
       width: 380,
-      height: 670,
+      height: 750,
       resizable: false,
       title: 'OnlyCat — Notification Settings',
       autoHideMenuBar: true,

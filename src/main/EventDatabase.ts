@@ -36,9 +36,15 @@ async function getDb(): Promise<any> {
       deviceId TEXT NOT NULL,
       data TEXT NOT NULL,
       createdAt TEXT,
+      favourite INTEGER DEFAULT 0,
       storedAt INTEGER DEFAULT (strftime('%s','now'))
     )
   `);
+
+  // Migration: add favourite column if missing (for existing DBs)
+  try {
+    db.run(`ALTER TABLE events ADD COLUMN favourite INTEGER DEFAULT 0`);
+  } catch { /* column already exists */ }
 
   db.run(`
     CREATE TABLE IF NOT EXISTS meta (
@@ -78,9 +84,13 @@ export async function saveEvents(events: DeviceEvent[]): Promise<void> {
 
 export async function loadAllEvents(): Promise<DeviceEvent[]> {
   const database = await getDb();
-  const result = database.exec(`SELECT data FROM events ORDER BY globalId DESC`);
+  const result = database.exec(`SELECT data, favourite FROM events ORDER BY globalId DESC`);
   if (!result.length) return [];
-  return result[0].values.map((row: any[]) => JSON.parse(row[0] as string));
+  return result[0].values.map((row: any[]) => {
+    const event = JSON.parse(row[0] as string);
+    event.favourite = row[1] === 1;
+    return event;
+  });
 }
 
 export async function getLatestGlobalId(): Promise<number | null> {
@@ -97,8 +107,35 @@ export async function getEventCount(): Promise<number> {
   return result[0].values[0][0] as number;
 }
 
-export async function setMeta(key: string, value: string): Promise<void> {
+export async function toggleFavourite(globalId: number): Promise<boolean> {
   const database = await getDb();
+  const result = database.exec(`SELECT favourite FROM events WHERE globalId = ?`, [globalId]);
+  const current = result.length && result[0].values.length ? result[0].values[0][0] : 0;
+  const newVal = current === 1 ? 0 : 1;
+  database.run(`UPDATE events SET favourite = ? WHERE globalId = ?`, [newVal, globalId]);
+  persist();
+  return newVal === 1;
+}
+
+export async function loadFavourites(): Promise<DeviceEvent[]> {
+  const database = await getDb();
+  const result = database.exec(`SELECT data FROM events WHERE favourite = 1 ORDER BY globalId DESC`);
+  if (!result.length) return [];
+  return result[0].values.map((row: any[]) => {
+    const event = JSON.parse(row[0] as string);
+    event.favourite = true;
+    return event;
+  });
+}
+
+export async function clearAllEvents(): Promise<void> {
+  const database = await getDb();
+  database.run(`DELETE FROM events`);
+  database.run(`DELETE FROM meta`);
+  persist();
+}
+
+export async function setMeta(key: string, value: string): Promise<void> {  const database = await getDb();
   database.run(`INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)`, [key, value]);
   persist();
 }

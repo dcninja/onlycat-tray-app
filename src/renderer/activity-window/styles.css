@@ -124,6 +124,21 @@ main {
 
 .share-btn:hover { background: #2a2a3e; color: #e0e0e0; }
 
+.fav-btn {
+  flex-shrink: 0;
+  background: transparent;
+  border: 1px solid #333;
+  border-radius: 6px;
+  color: #9e9e9e;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: background 0.15s, color 0.15s;
+  align-self: center;
+}
+
+.fav-btn:hover { background: #2a2a3e; color: #ffd54f; }
+
 .event-thumb {
   width: 96px;
   height: 72px;
