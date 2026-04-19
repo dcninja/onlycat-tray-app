@@ -16,6 +16,16 @@ let activeDirections: Set<string> = new Set(['INWARD', 'OUTWARD']);
 let activeActions: Set<string> = new Set(['TRANSIT', 'PEEK', 'DENY']);
 let showNoSummary = true;
 let knownRfids: Record<string, string> = {};
+let lastRenderedIds: number[] = []; // track what's currently in the DOM
+
+// Debounce helper
+function debounce(fn: () => void, ms: number): () => void {
+  let timer: ReturnType<typeof setTimeout>;
+  return () => {
+    clearTimeout(timer);
+    timer = setTimeout(fn, ms);
+  };
+}
 
 function formatTime(iso: string): string {
   try {
@@ -36,12 +46,10 @@ function visibleEvents(): DeviceEvent[] {
   } else if (activeTab === 'unknown') {
     events = events.filter(e => {
       if (e.catName) return false;
-      // Check subevents for RFID codes if the event itself has none
       const rfids = e.rfidCodes?.length
         ? e.rfidCodes
         : (e.subevents?.map(s => s.rfidCode).filter((c): c is string => !!c) ?? []);
-      if (!rfids.length) return true; // no RFID anywhere = unknown
-      // If all RFID codes are known, this isn't an unknown cat
+      if (!rfids.length) return true;
       const allKnown = rfids.every(code => knownRfids[code]);
       return !allKnown;
     });
@@ -59,14 +67,10 @@ function visibleEvents(): DeviceEvent[] {
     return activeClassifications.has(cls);
   });
 
-  // Summary filters — only filter events that have summary data
-  // Events without summary data are controlled by the "No Summary" checkbox
   events = events.filter(e => {
     const lastSub = e.subevents?.[e.subevents.length - 1];
     if (!lastSub) return showNoSummary;
-    // If direction filter is active and doesn't match, hide
     if (activeDirections.size < 2 && !activeDirections.has(lastSub.direction)) return false;
-    // If action filter is active and doesn't match, hide
     if (activeActions.size < 3 && !activeActions.has(lastSub.action)) return false;
     return true;
   });
@@ -90,7 +94,7 @@ function renderEvent(event: DeviceEvent): HTMLLIElement {
   li.dataset.globalId = String(event.globalId);
 
   const thumb = event.thumbnailUrl
-    ? `<img class="event-thumb" src="${event.thumbnailUrl}" alt="thumbnail" />`
+    ? `<img class="event-thumb" src="${event.thumbnailUrl}" alt="thumbnail" loading="lazy" />`
     : `<div class="event-thumb-placeholder">📷</div>`;
 
   li.innerHTML = `
@@ -108,7 +112,6 @@ function renderEvent(event: DeviceEvent): HTMLLIElement {
   `;
 
   li.addEventListener('click', (e) => {
-    // Don't open video if share button was clicked
     if ((e.target as HTMLElement).classList.contains('share-btn')) return;
     window.onlycat.openVideo!(event.deviceId, event.eventId);
   });
@@ -136,15 +139,23 @@ function renderEvent(event: DeviceEvent): HTMLLIElement {
 
 function renderList(): void {
   const visible = visibleEvents();
-  eventList.innerHTML = '';
-  for (const ev of visible) {
-    eventList.appendChild(renderEvent(ev));
-  }
-  emptyMsg.hidden = visible.length > 0;
-}
+  const newIds = visible.map(e => e.globalId);
 
-function updateEmptyState(): void {
-  emptyMsg.hidden = visibleEvents().length > 0;
+  // Skip full re-render if the visible list hasn't changed
+  if (newIds.length === lastRenderedIds.length && newIds.every((id, i) => id === lastRenderedIds[i])) {
+    emptyMsg.hidden = visible.length > 0;
+    return;
+  }
+
+  // Use DocumentFragment for batch DOM insertion
+  const fragment = document.createDocumentFragment();
+  for (const ev of visible) {
+    fragment.appendChild(renderEvent(ev));
+  }
+  eventList.innerHTML = '';
+  eventList.appendChild(fragment);
+  lastRenderedIds = newIds;
+  emptyMsg.hidden = visible.length > 0;
 }
 
 // Tab switching
@@ -157,10 +168,11 @@ tabs.forEach(tab => {
   });
 });
 
-// Search
+// Search — debounced to avoid filtering on every keystroke
+const debouncedRender = debounce(() => renderList(), 200);
 searchInput.addEventListener('input', () => {
   searchTerm = searchInput.value.trim();
-  renderList();
+  debouncedRender();
 });
 
 // Classification filters
@@ -216,7 +228,16 @@ window.onlycat.onEventsLoadMoreResult!((events: DeviceEvent[]) => {
 
 window.onlycat.onEventPrepend!((event: DeviceEvent) => {
   allEvents = [event, ...allEvents];
-  renderList();
+  // Fast path: if the new event passes filters, prepend to DOM instead of full re-render
+  const visible = visibleEvents();
+  if (visible.length > 0 && visible[0].globalId === event.globalId) {
+    const li = renderEvent(event);
+    eventList.insertBefore(li, eventList.firstChild);
+    lastRenderedIds = [event.globalId, ...lastRenderedIds];
+    emptyMsg.hidden = true;
+  } else {
+    renderList();
+  }
 });
 
 // Load more — use smallest globalId as cursor

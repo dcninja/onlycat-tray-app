@@ -78,13 +78,20 @@ class NotificationManager {
 
     notification.on('click', () => {
       this.onEventClick(event);
-      // Clean up temp file after click
       if (iconPath) try { fs.unlinkSync(iconPath); } catch {}
     });
 
     notification.on('close', () => {
       if (iconPath) try { fs.unlinkSync(iconPath); } catch {}
     });
+
+    // Fallback cleanup — if neither click nor close fires within 60s, clean up anyway
+    if (iconPath) {
+      const fallbackPath = iconPath;
+      setTimeout(() => {
+        try { fs.unlinkSync(fallbackPath); } catch {}
+      }, 60000);
+    }
 
     notification.show();
   }

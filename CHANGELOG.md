@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.5.2] - 2026-04-19
+
+### Fixed
+- Event summaries (direction/action emojis) not showing on cached events after app restart
+  - Summaries fetched from API were discarded during cache dedup before reaching the renderer
+  - Backfill now runs before filtering, and updated events are re-sent to the activity window
+  - Updated summaries are also persisted to SQLite so they survive future restarts
+- Unknown Cats tab incorrectly showing known cats (e.g. Roxy)
+  - Events without `rfidCodes` on the event object now also check subevent RFID codes from event summaries
+  - Cat names are backfilled from the local RFID cache when loading events from SQLite
+  - RFID cache is now sent to the renderer after live events arrive
+- Activity window not coming to front on Linux when already open — window is now recreated on each open
+- Video retry loop no longer infinite — capped at 6 retries (30 seconds), then shows permanent message
+- Disconnect timer now cleared on sign out, preventing stale "connection lost" notifications
+- Notification thumbnail temp files cleaned up after 60 seconds even if OS dismisses without click/close
+
+### Changed
+- Activity window stays on top on Linux (not on Windows/macOS where focus works natively)
+- Search input debounced (200ms) for smoother typing with large event lists
+- Event list uses DocumentFragment for batch DOM rendering instead of one-by-one append
+- Full re-render skipped when visible event list hasn't changed
+- New live events prepended directly to DOM instead of rebuilding entire list
+- Thumbnail images use lazy loading to reduce initial load time
+- Screenshots added to README
+
 ## [1.5.1] - 2026-04-19
 
 ### Fixed

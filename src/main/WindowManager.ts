@@ -48,9 +48,11 @@ class WindowManager {
   }
 
   openActivityWindow(): void {
+    // On Linux, re-focusing an existing window is unreliable — close and recreate
     if (this.activityWindow && !this.activityWindow.isDestroyed()) {
-      this.activityWindow.focus();
-      return;
+      const oldWindow = this.activityWindow;
+      this.activityWindow = null;
+      oldWindow.destroy();
     }
 
     this.activityWindow = new BrowserWindow({
@@ -58,6 +60,7 @@ class WindowManager {
       height: 900,
       title: 'OnlyCat — Recent Activity',
       autoHideMenuBar: true,
+      alwaysOnTop: process.platform === 'linux',
       icon: APP_ICON,
       webPreferences: {
         nodeIntegration: false,

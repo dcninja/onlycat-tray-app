@@ -353,6 +353,10 @@ ipcMain.on(IPC_CHANNELS.AUTH_SUBMIT_TOKEN, (_event, payload: AuthSubmitTokenPayl
 function handleSignOut(): void {
   tokenStore.clear();
   gatewayClient.disconnect();
+  if (disconnectTimer) {
+    clearTimeout(disconnectTimer);
+    disconnectTimer = null;
+  }
   devices = [];
   cachedEvents = [];
   eventsCached = false;

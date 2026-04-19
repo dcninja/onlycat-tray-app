@@ -12,6 +12,8 @@ videoPlayer.addEventListener('error', () => {
 let currentDeviceId: string | null = null;
 let currentEventId: number | null = null;
 let retryTimer: ReturnType<typeof setTimeout> | null = null;
+const MAX_RETRIES = 6; // 6 retries × 5 seconds = 30 seconds max
+let retryCount = 0;
 
 function setVideoUrl(url: string): void {
   notAvailable.hidden = true;
@@ -30,7 +32,13 @@ function showNotAvailable(): void {
 
 function scheduleRetry(): void {
   if (retryTimer) clearTimeout(retryTimer);
+  if (retryCount >= MAX_RETRIES) {
+    notAvailable.textContent = 'Video is not available for this event.';
+    showNotAvailable();
+    return;
+  }
   if (currentDeviceId !== null && currentEventId !== null) {
+    retryCount++;
     retryTimer = setTimeout(() => {
       window.onlycat.requestRetry!(currentDeviceId!, currentEventId!);
     }, 5000);
@@ -74,7 +82,9 @@ window.onlycat.onVideoOpen!((_payload: VideoOpenPayload) => {
   eventLabel.textContent = 'Loading event...';
   videoPlayer.src = '';
   videoPlayer.hidden = false;
+  notAvailable.textContent = 'Video not yet available — retrying...';
   notAvailable.hidden = true;
+  retryCount = 0;
   if (retryTimer) {
     clearTimeout(retryTimer);
     retryTimer = null;
