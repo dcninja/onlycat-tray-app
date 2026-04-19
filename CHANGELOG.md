@@ -1,9 +1,9 @@
 # Changelog
 
-## [1.4.0] - 2026-04-19
+## [1.5.0] - 2026-04-19
 
 ### Added
-- **Favourites** — star button (⭐/☆) on each event card to mark favourites, persisted in SQLite (thanks @Alex-Ala, @Zone-MR)
+- **Favourites** — star button (⭐/☆) on each event card to mark favourites, persisted in SQLite (thanks @Alex-Ala)
 - **Favourites tab** in Recent Activity — shows only starred events
 - **Load More button restored** — events fetched one page at a time instead of full history on startup
   - Each page is cached to SQLite as it's loaded
@@ -21,7 +21,7 @@
 - Settings window renamed from "Notification Settings" to "Settings"
 - Removed automatic full event history fetch on startup
 - Events are now cached incrementally as the user browses
-- Initial load fetches last 24 hours of events (thanks @Alex-Ala, @Zone-MR)
+- Initial load fetches last 24 hours of events (thanks @Alex-Ala)
 
 ## [1.3.1] - 2026-04-18
 
