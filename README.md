@@ -7,6 +7,16 @@ A cross-platform desktop system tray application for [OnlyCat](https://onlycat.c
 
 ---
 
+## Screenshots
+
+### Tray Menu
+![Tray Menu](assets/screenshots/tray-menu.png)
+
+### Activity Window
+![Activity Window](assets/screenshots/activity-window.png)
+
+---
+
 ## Features
 
 - **Favourites** — star events to save them locally, view in the Favourites tab
