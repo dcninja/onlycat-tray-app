@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.5.1] - 2026-04-19
+
+### Fixed
+- Event summaries (direction/action emojis) not showing on cached events after app restart
+  - Summaries fetched from API were discarded during cache dedup before reaching the renderer
+  - Backfill now runs before filtering, and updated events are re-sent to the activity window
+  - Updated summaries are also persisted to SQLite so they survive future restarts
+
 ## [1.5.0] - 2026-04-19
 
 ### Added

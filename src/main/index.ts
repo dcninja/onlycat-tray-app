@@ -433,6 +433,7 @@ ipcMain.on(IPC_CHANNELS.EVENTS_LOAD_MORE, async (_event, payload: EventsLoadMore
     ? Math.max(...cachedEvents.map(e => e.globalId))
     : undefined;
   let cursor: number | undefined = payload.beforeGlobalId;
+  let summariesBackfilled = false;
 
   try {
     // Fetch pages until we have 3 days of data (initial) or one page (load more)
@@ -468,7 +469,9 @@ ipcMain.on(IPC_CHANNELS.EVENTS_LOAD_MORE, async (_event, payload: EventsLoadMore
             }
           } catch { /* skip */ }
         }
-        return { ...normalized, ...(catName ? { catName } : {}), ...(summary ? { summary, subevents } : {}) };
+        const enrichedEvent = { ...normalized, ...(catName ? { catName } : {}), ...(summary ? { summary, subevents } : {}) };
+
+        return enrichedEvent;
       }));
 
       allFetched.push(...enriched);
@@ -478,6 +481,15 @@ ipcMain.on(IPC_CHANNELS.EVENTS_LOAD_MORE, async (_event, payload: EventsLoadMore
       if (isInitialLoad) {
         // If we have a cache, stop when we reach events we already have
         if (newestCachedId && page.some(e => e.globalId <= newestCachedId)) {
+          // Before filtering, backfill summaries for cached events that were missing them
+          for (const fetched of allFetched) {
+            if (!fetched.summary) continue;
+            const idx = cachedEvents.findIndex(c => c.globalId === fetched.globalId);
+            if (idx !== -1 && !cachedEvents[idx].summary) {
+              cachedEvents[idx] = { ...cachedEvents[idx], summary: fetched.summary, subevents: fetched.subevents };
+              summariesBackfilled = true;
+            }
+          }
           // Filter out events we already have
           const newOnly = allFetched.filter(e => !cachedEvents.some(c => c.globalId === e.globalId));
           allFetched.length = 0;
@@ -496,9 +508,19 @@ ipcMain.on(IPC_CHANNELS.EVENTS_LOAD_MORE, async (_event, payload: EventsLoadMore
     // Cache to SQLite
     if (allFetched.length) saveEvents(allFetched).catch(console.error);
 
-    // Add to in-memory cache (dedup by globalId)
+    // Add to in-memory cache (dedup by globalId), and update stale entries that now have summaries
     const existingIds = new Set(cachedEvents.map(e => e.globalId));
     const newEvents = allFetched.filter(e => !existingIds.has(e.globalId));
+    // Update existing cached events that were missing summaries but now have them
+    let summariesUpdated = false;
+    for (const fetched of allFetched) {
+      if (!fetched.summary) continue;
+      const idx = cachedEvents.findIndex(c => c.globalId === fetched.globalId);
+      if (idx !== -1 && !cachedEvents[idx].summary) {
+        cachedEvents[idx] = { ...cachedEvents[idx], summary: fetched.summary, subevents: fetched.subevents };
+        summariesUpdated = true;
+      }
+    }
     cachedEvents = [...cachedEvents, ...newEvents];
     eventsCached = true;
 
@@ -516,6 +538,13 @@ ipcMain.on(IPC_CHANNELS.EVENTS_LOAD_MORE, async (_event, payload: EventsLoadMore
       activityWin.webContents.send(IPC_CHANNELS.EVENTS_LIST, allFetched);
     }
     // If we had cache and no new events, do nothing — cached events already shown
+    // But if summaries were updated on existing events, re-send the full list so the renderer picks them up
+    if ((summariesUpdated || summariesBackfilled) && isInitialLoad) {
+      activityWin.webContents.send(IPC_CHANNELS.EVENTS_LIST, cachedEvents);
+      // Persist updated summaries to SQLite
+      const updatedEvents = cachedEvents.filter(e => e.summary);
+      if (updatedEvents.length) saveEvents(updatedEvents).catch(console.error);
+    }
     activityWin.webContents.send(IPC_CHANNELS.KNOWN_RFIDS, settingsStore.getRfidCache());
   } catch (err) {
     console.error('getEvents failed', err);
