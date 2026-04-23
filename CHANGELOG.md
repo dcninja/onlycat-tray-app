@@ -1,6 +1,6 @@
 # Changelog
 
-## [1.6.0] - 2026-04-23
+## [1.7.0] - 2026-04-23
 
 ### Added
 - **Export events to CSV** — 📥 Export button in the activity window exports the currently visible events (respects active tab, search, and filters) via a native Save As dialog
