@@ -20,20 +20,26 @@ A cross-platform desktop system tray application for [OnlyCat](https://onlycat.c
 ## Features
 
 - **Favourites** — star events to save them locally, view in the Favourites tab
+- **Export events** — export the currently visible events to CSV with one click
+- **Auto-start on login** — optional toggle in Settings to launch OnlyCat on system startup
+- **Live event summaries** — summaries update automatically as events are processed by the API
 - **SQLite event database** — events cached locally between sessions; only new events fetched on subsequent startups
 - **System tray icon** — runs silently in the background with a badge showing missed events
+- **Tray tooltip** — hover the tray icon to see the last event with cat name, summary, and relative time (Windows/macOS)
 - **Real-time notifications** — desktop notification when your cat is detected, with cat name, time, and event classification (Entry Allowed, Contraband Detected)
 - **Recent Activity window** — browse your full event history with thumbnails, cat names, and timestamps
-  - Three tabs: Video Movement Events / All Events / Unknown Cats
+  - Four tabs: Video Movement Events / All Events / Unknown Cats / Favourites
   - Search by cat name
   - Filter by event classification
   - Filter by direction (🢃 Inward / 🢁 Outward) and action (✅ Transit / 👀 Peek / ⛔ Deny)
   - Share event URL with one click
+  - Export filtered events to CSV
 - **Event summaries** — direction and action shown per event with emoji indicators
 - **Video viewer** — click any event or notification to open the full event video
 - **Door Policy control** — switch between door policies directly from the tray menu
 - **Device status** — see online/offline status and uptime for each device
 - **Notification Settings** — dedicated settings window to configure exactly which events trigger notifications (classification, direction, action, video-only)
+- **Settings** — manage device token, auto-start, notification filters, and test notifications from one window
 - **Unknown Cats** — identify events from unregistered RFID chips
 - **Auto-reconnect** — automatically reconnects if the connection drops
 - **Check for Updates** — checks GitHub releases for newer versions
@@ -87,12 +93,14 @@ Your token is stored securely using your OS keychain (or encrypted local storage
 
 ### Recent Activity
 - Browse all events with thumbnails, cat names, timestamps, and event summary (direction + action)
-- Switch between **Video Movement Events**, **All Events**, and **Unknown Cats** tabs
+- Switch between **Video Movement Events**, **All Events**, **Unknown Cats**, and **⭐ Favourites** tabs
 - **Unknown Cats** — shows events with RFID codes not in your saved cat name cache
 - Search by cat name using the search box
 - Filter by classification, direction (🢃/🢁) and action (✅/👀/⛔) using the checkboxes
 - Click an event to open the video
 - Click 🔗 to copy the shareable event URL
+- Click ⭐ to favourite an event (stored locally)
+- Click 📥 Export to save the currently visible events as CSV
 
 ### Notifications
 When a new event is detected you'll receive a desktop notification showing:
@@ -107,6 +115,8 @@ Click the notification to open the event video directly.
 ### Settings
 Click **⚙ Settings** in the tray menu to configure:
 - View and change device token
+- Start OnlyCat on login
+- Send a test notification
 - Video movement only toggle
 - Event classification filters
 - Direction filters (Inward/Outward)
