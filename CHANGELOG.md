@@ -1,6 +1,14 @@
 # Changelog
 
-## [1.5.2] - 2026-04-19
+## [1.6.0] - 2026-04-23
+
+### Added
+- **Live event summary updates** — event summaries now refresh automatically as events are processed
+  - Subscribes to `eventUpdate` from the gateway for real-time summary changes
+  - Debounced re-fetch (10s after last update) to avoid excessive API calls
+  - Timed re-fetches at 15s, 30s, and 60s as a safety net for events without live updates
+  - Activity window updates in place when summaries change — no need to close and reopen
+- **Windows tray icon badge fix** — badge icon now renders at correct size (32px) for Windows system tray
 
 ### Fixed
 - Event summaries (direction/action emojis) not showing on cached events after app restart
@@ -15,12 +23,12 @@
 - Video retry loop no longer infinite — capped at 6 retries (30 seconds), then shows permanent message
 - Disconnect timer now cleared on sign out, preventing stale "connection lost" notifications
 - Notification thumbnail temp files cleaned up after 60 seconds even if OS dismisses without click/close
+- Render-skip optimization now detects content changes (summary updates), not just list changes
 
 ### Changed
 - Activity window stays on top on Linux (not on Windows/macOS where focus works natively)
 - Search input debounced (200ms) for smoother typing with large event lists
 - Event list uses DocumentFragment for batch DOM rendering instead of one-by-one append
-- Full re-render skipped when visible event list hasn't changed
 - New live events prepended directly to DOM instead of rebuilding entire list
 - Thumbnail images use lazy loading to reduce initial load time
 - Screenshots added to README

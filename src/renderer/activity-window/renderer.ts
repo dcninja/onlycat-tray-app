@@ -17,6 +17,7 @@ let activeActions: Set<string> = new Set(['TRANSIT', 'PEEK', 'DENY']);
 let showNoSummary = true;
 let knownRfids: Record<string, string> = {};
 let lastRenderedIds: number[] = []; // track what's currently in the DOM
+let lastRenderedFingerprint = ''; // track content changes (summaries etc)
 
 // Debounce helper
 function debounce(fn: () => void, ms: number): () => void {
@@ -141,8 +142,11 @@ function renderList(): void {
   const visible = visibleEvents();
   const newIds = visible.map(e => e.globalId);
 
-  // Skip full re-render if the visible list hasn't changed
-  if (newIds.length === lastRenderedIds.length && newIds.every((id, i) => id === lastRenderedIds[i])) {
+  // Build a fingerprint that includes summary data so we detect content changes
+  const fingerprint = visible.map(e => `${e.globalId}:${e.summary ?? ''}`).join(',');
+
+  // Skip full re-render if the visible list and content haven't changed
+  if (fingerprint === lastRenderedFingerprint) {
     emptyMsg.hidden = visible.length > 0;
     return;
   }
@@ -155,6 +159,7 @@ function renderList(): void {
   eventList.innerHTML = '';
   eventList.appendChild(fragment);
   lastRenderedIds = newIds;
+  lastRenderedFingerprint = fingerprint;
   emptyMsg.hidden = visible.length > 0;
 }
 

@@ -551,7 +551,6 @@ ipcMain.on(IPC_CHANNELS.EVENTS_LOAD_MORE, async (_event, payload: EventsLoadMore
         activityWin.webContents.send(IPC_CHANNELS.EVENTS_PREPEND, event);
       }
     } else if (!isInitialLoad || cachedEvents.length === 0) {
-      // No cache — send whatever we fetched (could be empty on no events)
       activityWin.webContents.send(IPC_CHANNELS.EVENTS_LIST, allFetched);
     }
     // If we had cache and no new events, do nothing — cached events already shown
@@ -623,6 +622,18 @@ gatewayClient.on('userEventUpdate', async (data: { type: string; body: DeviceEve
   if (activityWin) {
     activityWin.webContents.send(IPC_CHANNELS.EVENTS_PREPEND, enriched);
     activityWin.webContents.send(IPC_CHANNELS.KNOWN_RFIDS, settingsStore.getRfidCache());
+  }
+
+  // Schedule summary re-fetches after the event has had time to finish processing
+  // Re-fetch at 15s, 30s, and 60s to catch events that take longer to process
+  if (enriched.accessToken) {
+    const eid = enriched.deviceId;
+    const evId = enriched.eventId;
+    for (const delay of [15000, 30000, 60000]) {
+      setTimeout(() => {
+        refreshEventSummary(eid, evId);
+      }, delay);
+    }
   }
 });
 
@@ -703,14 +714,68 @@ ipcMain.on(IPC_CHANNELS.VIDEO_OPEN, (_event, payload: { deviceId: string; eventI
   fetchAndSendEvent(payload.deviceId, payload.eventId);
 });
 
+// Track recent events for summary refresh — keyed by "deviceId/eventId"
+const pendingSummaryRefresh: Map<string, ReturnType<typeof setTimeout>> = new Map();
+const SUMMARY_SETTLE_DELAY = 10000; // wait 10s after last update before re-fetching summary
+
+async function refreshEventSummary(deviceId: string, eventId: number): Promise<void> {
+  const cached = cachedEvents.find(e => e.deviceId === deviceId && e.eventId === eventId);
+  if (!cached?.accessToken) return;
+
+  try {
+    const result = await gatewayClient.request('getEventSummary', {
+      deviceId,
+      eventId,
+      accessToken: cached.accessToken,
+      subscribe: true,
+    }) as { subevents?: Array<{ startFrameIndex: number; endFrameIndex: number; direction: string; action: string; rfidCode: string | null }> } | null;
+
+    if (result?.subevents?.length) {
+      const parts = result.subevents.map(s => formatSubevent(s.direction, s.action));
+      const summary = parts[parts.length - 1];
+      const subevents = result.subevents;
+
+      const idx = cachedEvents.findIndex(e => e.deviceId === deviceId && e.eventId === eventId);
+      if (idx !== -1) {
+        // Skip if summary hasn't changed
+        if (cachedEvents[idx].summary === summary) {
+          return;
+        }
+        cachedEvents[idx] = { ...cachedEvents[idx], summary, subevents };
+        saveEvents([cachedEvents[idx]]).catch(console.error);
+        const activityWin = windowManager.getActivityWindow();
+        if (activityWin) {
+          activityWin.webContents.send(IPC_CHANNELS.EVENTS_LIST, cachedEvents);
+        }
+      }
+    } else {
+      // No subevents returned
+    }
+  } catch {
+    // skip
+  }
+}
+
 gatewayClient.on('eventUpdate', (data: { type: string; deviceId: string; eventId: number; body: Partial<DeviceEvent> }) => {
-  if (data.type !== 'update' || !currentVideoEvent) return;
-  if (data.deviceId !== currentVideoEvent.deviceId || data.eventId !== currentVideoEvent.eventId) return;
+  if (data.type !== 'update') return;
 
-  const videoWin = windowManager.getVideoWindow();
-  if (!videoWin) return;
+  // Video window forwarding
+  if (currentVideoEvent && data.deviceId === currentVideoEvent.deviceId && data.eventId === currentVideoEvent.eventId) {
+    const videoWin = windowManager.getVideoWindow();
+    if (videoWin) {
+      videoWin.webContents.send(IPC_CHANNELS.VIDEO_EVENT_UPDATE, {
+        ...data.body, deviceId: data.deviceId, eventId: data.eventId,
+      });
+    }
+  }
 
-  videoWin.webContents.send(IPC_CHANNELS.VIDEO_EVENT_UPDATE, {
-    ...data.body, deviceId: data.deviceId, eventId: data.eventId,
-  });
+  // Summary refresh — debounce: reset timer on each update, fetch once updates settle
+  const key = `${data.deviceId}/${data.eventId}`;
+  const existing = pendingSummaryRefresh.get(key);
+  if (existing) clearTimeout(existing);
+
+  pendingSummaryRefresh.set(key, setTimeout(() => {
+    pendingSummaryRefresh.delete(key);
+    refreshEventSummary(data.deviceId, data.eventId);
+  }, SUMMARY_SETTLE_DELAY));
 });

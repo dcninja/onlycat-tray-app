@@ -204,32 +204,40 @@ class TrayManager {
       return;
     }
 
-    // Generate badged icon using SVG overlay
+    // Generate badged icon using SVG overlay via sharp
+    // Use platform-appropriate icon size: Windows tray needs small icons
+    const iconSize = process.platform === 'win32' ? 32 : 256;
+    const badgeRatio = 0.375; // badge takes up 3/8 of icon
+    const badgeSize = Math.round(iconSize * badgeRatio);
+    const fontSize = Math.round(badgeSize * 0.6);
+
     try {
       const sharp = require('sharp');
       const count = this.missedCount > 99 ? '99+' : String(this.missedCount);
-      const fontSize = count.length > 1 ? 52 : 60;
-      const badgeSize = 96;
+      const adjustedFontSize = count.length > 2 ? Math.round(fontSize * 0.7) : count.length > 1 ? Math.round(fontSize * 0.85) : fontSize;
       const badgeSvg = `
         <svg width="${badgeSize}" height="${badgeSize}" xmlns="http://www.w3.org/2000/svg">
           <circle cx="${badgeSize/2}" cy="${badgeSize/2}" r="${badgeSize/2}" fill="#ef5350"/>
           <text x="50%" y="50%" dominant-baseline="central" text-anchor="middle"
-            font-family="Arial, sans-serif" font-size="${fontSize}" font-weight="bold" fill="white">${count}</text>
+            font-family="Arial, sans-serif" font-size="${adjustedFontSize}" font-weight="bold" fill="white">${count}</text>
         </svg>`;
 
       sharp(iconPath)
-        .resize(256, 256)
+        .resize(iconSize, iconSize)
         .composite([{
           input: Buffer.from(badgeSvg),
-          top: 256 - badgeSize,
-          left: 256 - badgeSize,
+          top: iconSize - badgeSize,
+          left: iconSize - badgeSize,
         }])
         .png()
         .toBuffer()
         .then((buf: Buffer) => {
-          if (this.tray) this.tray.setImage(nativeImage.createFromBuffer(buf));
+          if (this.tray) this.tray.setImage(nativeImage.createFromBuffer(buf, { scaleFactor: process.platform === 'win32' ? 1.0 : 2.0 }));
         })
-        .catch(() => {});
+        .catch(() => {
+          // sharp compositing failed — fall back to plain icon
+          if (this.tray) this.tray.setImage(nativeImage.createFromPath(iconPath));
+        });
     } catch {
       // sharp not available — fall back to plain icon
       this.tray.setImage(nativeImage.createFromPath(iconPath));
