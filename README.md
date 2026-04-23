@@ -81,7 +81,7 @@ Your token is stored securely using your OS keychain (or encrypted local storage
 - **Device list** — shows each device with online status and uptime
 - **Door Policy** — switch the active door policy with a single click
 - **View Recent Activity** — opens the activity window
-- **Notify only on Video Movement** — toggle to only receive notifications for events with video
+- **⚙ Settings** — configure notifications, view and change device token
 - **Check for Updates** — checks for a newer version on GitHub
 - **Sign Out** — clears your stored token
 
@@ -104,8 +104,9 @@ When a new event is detected you'll receive a desktop notification showing:
 
 Click the notification to open the event video directly.
 
-### Notification Settings
-Click **⚙ Notification Settings** in the tray menu to configure:
+### Settings
+Click **⚙ Settings** in the tray menu to configure:
+- View and change device token
 - Video movement only toggle
 - Event classification filters
 - Direction filters (Inward/Outward)
