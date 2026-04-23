@@ -1,4 +1,4 @@
-import { app, ipcMain, Notification, clipboard } from 'electron';
+import { app, ipcMain, Notification, clipboard, dialog } from 'electron';
 import tokenStore from './TokenStore';
 import gatewayClient from './GatewayClient';
 import trayManager from './TrayManager';
@@ -128,6 +128,7 @@ async function fetchAllEvents(): Promise<void> {
   eventsCached = true;
   await setMeta('lastRun', new Date().toISOString());
   console.log(`fetchAllEvents: total cached events = ${cachedEvents.length}`);
+  if (cachedEvents.length > 0) trayManager.setLastEvent(cachedEvents[0]);
 }
 
 // Build normalized event with derived URLs and device name
@@ -249,35 +250,18 @@ app.on('ready', async () => {
       }
     },
     notifyOnVideoOnly: settingsStore.notifyOnVideoOnly,
-    onTestNotification: async () => {
-      try {
-        const result = await gatewayClient.request('getEvents', {}) as DeviceEvent[];
-        if (result?.length) {
-          const event = normalizeEvent(result[0], devices);
-          const catName = await getCatName(event);
-          let enriched = catName ? { ...event, catName } : event;
-          // Fetch event summary
-          if (event.accessToken) {
-            try {
-              const summaryResult = await gatewayClient.request('getEventSummary', {
-                deviceId: event.deviceId,
-                eventId: event.eventId,
-                accessToken: event.accessToken,
-                subscribe: true,
-              }) as { subevents?: Array<{ startFrameIndex: number; endFrameIndex: number; direction: string; action: string; rfidCode: string | null }> } | null;
-              if (summaryResult?.subevents?.length) {
-                const parts = summaryResult.subevents.map(s => formatSubevent(s.direction, s.action));
-                enriched = { ...enriched, summary: parts[parts.length - 1], subevents: summaryResult.subevents };
-              }
-            } catch { /* skip */ }
-          }
-          await notificationManager.notify(enriched, enriched.deviceName ?? enriched.deviceId, catName);
-        }
-      } catch (err) {
-        console.error('test notification failed', err);
-      }
+    autoStartEnabled: settingsStore.autoStart,
+    onToggleAutoStart: () => {
+      const newVal = !settingsStore.autoStart;
+      settingsStore.autoStart = newVal;
+      app.setLoginItemSettings({ openAtLogin: newVal });
+      trayManager.setAutoStart(newVal);
     },
+    onTestNotification: () => {},
   });
+
+  // Sync auto-start setting with OS
+  app.setLoginItemSettings({ openAtLogin: settingsStore.autoStart });
 
   notificationManager.init({
     onEventClick: (event: DeviceEvent) => {
@@ -407,6 +391,7 @@ gatewayClient.on('connected', () => {
             if (stored.length > 0) {
               cachedEvents = stored;
               eventsCached = true;
+              trayManager.setLastEvent(cachedEvents[0]);
             }
           }).catch(console.error);
         }
@@ -612,6 +597,7 @@ gatewayClient.on('userEventUpdate', async (data: { type: string; body: DeviceEve
   }
 
   cacheEvent(enriched);
+  trayManager.setLastEvent(enriched);
 
   if (shouldNotify && passedSummaryFilter) {
     trayManager.setUnacknowledgedEvent(enriched);
@@ -680,10 +666,104 @@ ipcMain.handle('notification-settings:save', (_e, settings) => {
 });
 ipcMain.on('notification-settings:close', () => windowManager.closeNotificationSettings());
 
+// Auto-start IPC
+ipcMain.handle('settings:get-auto-start', () => settingsStore.autoStart);
+ipcMain.handle('settings:set-auto-start', (_e, enabled: boolean) => {
+  settingsStore.autoStart = enabled;
+  app.setLoginItemSettings({ openAtLogin: enabled });
+  trayManager.setAutoStart(enabled);
+});
+
+// Test notification IPC
+ipcMain.handle('settings:test-notification', async () => {
+  try {
+    const result = await gatewayClient.request('getEvents', {}) as DeviceEvent[];
+    if (result?.length) {
+      const event = normalizeEvent(result[0], devices);
+      const catName = await getCatName(event);
+      let enriched = catName ? { ...event, catName } : event;
+      if (event.accessToken) {
+        try {
+          const summaryResult = await gatewayClient.request('getEventSummary', {
+            deviceId: event.deviceId,
+            eventId: event.eventId,
+            accessToken: event.accessToken,
+            subscribe: true,
+          }) as { subevents?: Array<{ startFrameIndex: number; endFrameIndex: number; direction: string; action: string; rfidCode: string | null }> } | null;
+          if (summaryResult?.subevents?.length) {
+            const parts = summaryResult.subevents.map(s => formatSubevent(s.direction, s.action));
+            enriched = { ...enriched, summary: parts[parts.length - 1], subevents: summaryResult.subevents };
+          }
+        } catch { /* skip */ }
+      }
+      await notificationManager.notify(enriched, enriched.deviceName ?? enriched.deviceId, catName);
+    }
+  } catch (err) {
+    console.error('test notification failed', err);
+  }
+});
+
 // Copy URL to clipboard
 ipcMain.on('copy:url', (_event, payload: { url: string }) => {
   clipboard.writeText(payload.url);
 });
+
+// Export events to CSV
+ipcMain.handle('events:export', async (_event, events: DeviceEvent[]) => {
+  const { canceled, filePath } = await dialog.showSaveDialog({
+    title: 'Export Events',
+    defaultPath: `onlycat-events-${new Date().toISOString().slice(0, 10)}.csv`,
+    filters: [
+      { name: 'CSV', extensions: ['csv'] },
+      { name: 'All Files', extensions: ['*'] },
+    ],
+  });
+
+  if (canceled || !filePath) return false;
+
+  const header = 'Date,Time,Device,Cat Name,Classification,Direction,Action,Summary,Event ID,Video URL';
+  const rows = events.map(e => {
+    const dt = e.createdAt ?? e.timestamp ?? '';
+    let date = '';
+    let time = '';
+    if (dt) {
+      try {
+        const d = new Date(dt);
+        date = d.toLocaleDateString('en-GB');
+        time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      } catch { /* skip */ }
+    }
+    const lastSub = e.subevents?.[e.subevents.length - 1];
+    const direction = lastSub?.direction ?? '';
+    const action = lastSub?.action ?? '';
+    const cls = classificationLabel(e.eventClassification);
+
+    return [
+      date,
+      time,
+      csvEscape(e.deviceName ?? e.deviceId),
+      csvEscape(e.catName ?? ''),
+      csvEscape(cls),
+      direction,
+      action,
+      csvEscape(e.summary ?? ''),
+      e.eventId,
+      csvEscape(e.videoUrl ?? ''),
+    ].join(',');
+  });
+
+  const csv = [header, ...rows].join('\n');
+  const fs = require('fs');
+  fs.writeFileSync(filePath, csv, 'utf8');
+  return true;
+});
+
+function csvEscape(value: string): string {
+  if (value.includes(',') || value.includes('"') || value.includes('\n')) {
+    return `"${value.replace(/"/g, '""')}"`;
+  }
+  return value;
+}
 
 // Activate transit policy
 ipcMain.on('policy:activate', async (_event, payload: { deviceId: string; policyId: number }) => {

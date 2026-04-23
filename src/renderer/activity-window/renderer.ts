@@ -7,6 +7,7 @@ const tabs = document.querySelectorAll<HTMLButtonElement>('.tab');
 const searchInput = document.getElementById('search-input') as HTMLInputElement;
 const filterChecks = document.querySelectorAll<HTMLInputElement>('.filter-check');
 const filterSummary = document.querySelectorAll<HTMLInputElement>('.filter-summary');
+const exportBtn = document.getElementById('export-btn') as HTMLButtonElement;
 
 let allEvents: DeviceEvent[] = [];
 let activeTab: 'video' | 'all' | 'unknown' | 'favourites' = 'video';
@@ -251,6 +252,19 @@ loadMoreBtn.addEventListener('click', () => {
   const minGlobalId = Math.min(...allEvents.map((e) => e.globalId));
   loadMoreBtn.disabled = true;
   window.onlycat.loadMore!(minGlobalId);
+});
+
+// Export visible events
+exportBtn.addEventListener('click', async () => {
+  const visible = visibleEvents();
+  if (visible.length === 0) return;
+  exportBtn.disabled = true;
+  exportBtn.textContent = 'Exporting...';
+  try {
+    await window.onlycat.exportEvents!(visible);
+  } catch { /* skip */ }
+  exportBtn.textContent = '📥 Export';
+  exportBtn.disabled = false;
 });
 
 // Initial load

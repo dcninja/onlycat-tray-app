@@ -14,6 +14,7 @@ interface Settings {
   notifyOnVideoOnly: boolean;  // kept for backward compat
   notifications: NotificationSettings;
   rfidCache: Record<string, string>;
+  autoStart: boolean;
 }
 
 const DEFAULTS: Settings = {
@@ -26,6 +27,7 @@ const DEFAULTS: Settings = {
     showNoSummary: true,
   },
   rfidCache: {},
+  autoStart: false,
 };
 
 class SettingsStore {
@@ -105,6 +107,16 @@ class SettingsStore {
     const settings = this.read();
     settings.rfidCache[rfidCode] = name;
     this.write(settings);
+  }
+
+  get autoStart(): boolean {
+    return this.read().autoStart;
+  }
+
+  set autoStart(value: boolean) {
+    const s = this.read();
+    s.autoStart = value;
+    this.write(s);
   }
 }
 

@@ -3,6 +3,15 @@
 ## [1.6.0] - 2026-04-23
 
 ### Added
+- **Export events to CSV** — 📥 Export button in the activity window exports the currently visible events (respects active tab, search, and filters) via a native Save As dialog
+- **Auto-start on login** — toggle in Settings to launch OnlyCat on system startup (Windows, macOS, Linux)
+- **Tray tooltip with last event** — hovering the tray icon shows the last event with cat name, summary, and relative time (Windows/macOS)
+- **Live event summary updates** — event summaries refresh automatically as events are processed
+  - Subscribes to `eventUpdate` from the gateway for real-time summary changes
+  - Timed re-fetches at 15s, 30s, and 60s as a safety net
+  - Activity window updates in place when summaries change
+- **Property-based tests** — all 13 design properties implemented with fast-check (100 iterations each)
+- **Test notification and auto-start moved to Settings window** for a cleaner tray menu
 - **Live event summary updates** — event summaries now refresh automatically as events are processed
   - Subscribes to `eventUpdate` from the gateway for real-time summary changes
   - Debounced re-fetch (10s after last update) to avoid excessive API calls

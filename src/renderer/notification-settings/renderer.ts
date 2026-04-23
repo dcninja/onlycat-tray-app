@@ -10,6 +10,8 @@ const cancelBtn = document.getElementById('cancel-btn') as HTMLButtonElement;
 const tokenInput = document.getElementById('token-input') as HTMLInputElement;
 const tokenSaveBtn = document.getElementById('token-save-btn') as HTMLButtonElement;
 const tokenMsg = document.getElementById('token-msg') as HTMLParagraphElement;
+const autoStartCheck = document.getElementById('auto-start') as HTMLInputElement;
+const testNotificationBtn = document.getElementById('test-notification-btn') as HTMLButtonElement;
 
 // Load current settings
 window.onlycat.getSettings!().then((settings: NotificationSettings) => {
@@ -64,3 +66,22 @@ saveBtn.addEventListener('click', async () => {
 });
 
 cancelBtn.addEventListener('click', () => window.onlycat.close!());
+
+// Auto-start
+(window.onlycat as any).getAutoStart().then((enabled: boolean) => {
+  autoStartCheck.checked = enabled;
+});
+autoStartCheck.addEventListener('change', () => {
+  (window.onlycat as any).setAutoStart(autoStartCheck.checked);
+});
+
+// Test notification
+testNotificationBtn.addEventListener('click', async () => {
+  testNotificationBtn.disabled = true;
+  testNotificationBtn.textContent = 'Sending...';
+  try {
+    await (window.onlycat as any).testNotification();
+  } catch { /* skip */ }
+  testNotificationBtn.textContent = '🔔 Send Test Notification';
+  testNotificationBtn.disabled = false;
+});

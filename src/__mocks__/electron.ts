@@ -38,10 +38,12 @@ const electron = {
   Menu: {
     buildFromTemplate: jest.fn((template: unknown[]) => ({ template })),
   },
-  Notification: jest.fn().mockImplementation(() => ({
+  Notification: Object.assign(jest.fn().mockImplementation(() => ({
     show: jest.fn(),
     on: jest.fn(),
-  })),
+  })), {
+    isSupported: jest.fn(() => true),
+  }),
   nativeImage: {
     createFromPath: jest.fn(() => ({})),
     createEmpty: jest.fn(() => ({})),

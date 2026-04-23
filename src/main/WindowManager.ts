@@ -86,7 +86,7 @@ class WindowManager {
 
     this.notificationSettingsWindow = new BrowserWindow({
       width: 380,
-      height: 750,
+      height: 800,
       resizable: false,
       title: 'OnlyCat — Notification Settings',
       autoHideMenuBar: true,

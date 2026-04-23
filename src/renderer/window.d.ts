@@ -12,6 +12,7 @@ declare global {
       openVideo?: (deviceId: string, eventId: number) => void;
       copyUrl?: (url: string) => void;
       toggleFavourite?: (globalId: number) => Promise<boolean>;
+      exportEvents?: (events: DeviceEvent[]) => Promise<boolean>;
       onEventsList?: (cb: (events: DeviceEvent[]) => void) => void;
       onEventsLoadMoreResult?: (cb: (events: DeviceEvent[]) => void) => void;
       onEventPrepend?: (cb: (event: DeviceEvent) => void) => void;

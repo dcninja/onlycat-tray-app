@@ -29,6 +29,9 @@ class TrayManager {
   private notifyOnVideoOnly: boolean = true;
   private updateAvailableVersion: string | null = null;
   private transitPolicies: Map<string, import('../shared/types').DeviceTransitPolicy[]> = new Map();
+  private lastEvent: DeviceEvent | null = null;
+  private autoStartEnabled: boolean = false;
+  private onToggleAutoStart: () => void = () => {};
 
   init(callbacks: {
     onActivityClick: OnActivityClick;
@@ -39,7 +42,9 @@ class TrayManager {
     onCheckUpdate: OnCheckUpdate;
     onActivatePolicy: OnActivatePolicy;
     onCheckNotificationSettings: OnCheckNotificationSettings;
+    onToggleAutoStart: () => void;
     notifyOnVideoOnly: boolean;
+    autoStartEnabled: boolean;
   }): void {
     this.onActivityClick = callbacks.onActivityClick;
     this.onSignOutClick = callbacks.onSignOutClick;
@@ -49,7 +54,9 @@ class TrayManager {
     this.onCheckUpdate = callbacks.onCheckUpdate;
     this.onActivatePolicy = callbacks.onActivatePolicy;
     this.onCheckNotificationSettings = callbacks.onCheckNotificationSettings;
+    this.onToggleAutoStart = callbacks.onToggleAutoStart;
     this.notifyOnVideoOnly = callbacks.notifyOnVideoOnly;
+    this.autoStartEnabled = callbacks.autoStartEnabled;
 
     // Use the cat icon from assets
     const iconPath = path.join(__dirname, '../../../assets/icon-256.png');
@@ -94,6 +101,16 @@ class TrayManager {
       this.missedCount = 0;
     }
     this.unacknowledgedEvent = event;
+    this.rebuild();
+  }
+
+  setLastEvent(event: DeviceEvent): void {
+    this.lastEvent = event;
+    this.rebuild();
+  }
+
+  setAutoStart(enabled: boolean): void {
+    this.autoStartEnabled = enabled;
     this.rebuild();
   }
 
@@ -170,8 +187,6 @@ class TrayManager {
       click: () => this.onCheckNotificationSettings(),
     });
     template.push({ type: 'separator' });
-    template.push({ label: '🔔 Test Notification', click: () => this.onTestNotification() });
-    template.push({ type: 'separator' });
     if (this.updateAvailableVersion) {
       template.push({
         label: `🆕 Update available: v${this.updateAvailableVersion}`,
@@ -245,19 +260,37 @@ class TrayManager {
   }
 
   private buildTooltip(): string {
-    if (this.devices.length === 0) return 'OnlyCat';
+    const lines: string[] = ['OnlyCat'];
 
-    const lines = this.devices.map(d => {
-      const name = d.name ?? d.description ?? d.deviceId;
-      if (d.connectivity?.timestamp) {
-        const since = new Date(d.connectivity.timestamp).toLocaleString();
-        const state = d.connectivity.connected ? 'Online' : 'Offline';
-        return `${name}: ${state} since ${since}`;
+    if (this.lastEvent) {
+      const name = this.lastEvent.catName ?? this.lastEvent.deviceName ?? this.lastEvent.deviceId;
+      const summary = this.lastEvent.summary ?? '';
+      const time = this.lastEvent.createdAt
+        ? this.timeAgo(new Date(this.lastEvent.createdAt))
+        : '';
+      lines.push(`Last: ${name} ${summary}${time ? ` — ${time}` : ''}`);
+    }
+
+    if (this.devices.length > 0) {
+      for (const d of this.devices) {
+        const name = d.name ?? d.description ?? d.deviceId;
+        const connected = d.connectivity?.connected ?? d.online;
+        lines.push(`${connected ? '🟢' : '🔴'} ${name}`);
       }
-      return `${name}: ${d.connectivity?.connected ? 'Online' : 'Offline'}`;
-    });
+    }
 
     return lines.join('\n');
+  }
+
+  private timeAgo(date: Date): string {
+    const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+    if (seconds < 60) return 'just now';
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
   }
 
   destroy(): void {

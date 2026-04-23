@@ -13,7 +13,7 @@
     "build:main": "tsc -p tsconfig.main.json",
     "build:renderer": "tsc -p tsconfig.renderer.json",
     "start": "electron . --no-sandbox",
-    "test": "jest --run",
+    "test": "jest",
     "test:watch": "jest",
     "dist": "npm run build && electron-builder",
     "dist:linux": "npm run build && electron-builder --linux",
