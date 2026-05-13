@@ -19,6 +19,7 @@ A cross-platform desktop system tray application for [OnlyCat](https://onlycat.c
 
 ## Features
 
+- **Device Health dashboard** — time-series graphs for WiFi signal, battery voltage, CPU temperature, uptime, and storage
 - **Favourites** — star events to save them locally, view in the Favourites tab
 - **Export events** — export the currently visible events to CSV with one click
 - **Auto-start on login** — optional toggle in Settings to launch OnlyCat on system startup
@@ -26,7 +27,8 @@ A cross-platform desktop system tray application for [OnlyCat](https://onlycat.c
 - **SQLite event database** — events cached locally between sessions; only new events fetched on subsequent startups
 - **System tray icon** — runs silently in the background with a badge showing missed events
 - **Tray tooltip** — hover the tray icon to see the last event with cat name, summary, and relative time (Windows/macOS)
-- **Cat last-seen in tray menu** — each device shows its cats with their last action and relative time
+- **Cat last-seen in tray menu** — each device shows its cats with their last action and relative time; click to view the event video
+- **Ignored Cats** — hide specific cats from the tray menu's last activity display via Settings
 - **Real-time notifications** — desktop notification when your cat is detected, with cat name, time, and event classification (Entry Allowed, Contraband Detected)
 - **Recent Activity window** — browse your full event history with thumbnails, cat names, and timestamps
   - Four tabs: Video Movement Events / All Events / Unknown Cats / Favourites
@@ -39,8 +41,7 @@ A cross-platform desktop system tray application for [OnlyCat](https://onlycat.c
 - **Video viewer** — click any event or notification to open the full event video
 - **Door Policy control** — switch between door policies directly from the tray menu
 - **Device status** — see online/offline status and uptime for each device
-- **Notification Settings** — dedicated settings window to configure exactly which events trigger notifications (classification, direction, action, video-only)
-- **Settings** — manage device token, auto-start, notification filters, and test notifications from one window
+- **Settings** — manage device token, auto-start, notification filters, ignored cats, and test notifications from one window
 - **Unknown Cats** — identify events from unregistered RFID chips
 - **Auto-reconnect** — automatically reconnects if the connection drops
 - **Check for Updates** — checks GitHub releases for newer versions
@@ -86,9 +87,11 @@ Your token is stored securely using your OS keychain (or encrypted local storage
 
 ### Tray Menu
 - **Device list** — shows each device with online status and uptime
+- **Cat last-seen** — shows each cat's last action and time; click to view the event video
 - **Door Policy** — switch the active door policy with a single click
 - **View Recent Activity** — opens the activity window
-- **⚙ Settings** — configure notifications, view and change device token
+- **Device Health** — opens the telemetry dashboard with time-series graphs
+- **⚙ Settings** — configure notifications, ignored cats, device token, and auto-start
 - **Check for Updates** — checks for a newer version on GitHub
 - **Sign Out** — clears your stored token
 
@@ -118,6 +121,7 @@ Click **⚙ Settings** in the tray menu to configure:
 - View and change device token
 - Start OnlyCat on login
 - Send a test notification
+- Ignored cats — hide specific cats from the tray menu
 - Video movement only toggle
 - Event classification filters
 - Direction filters (Inward/Outward)

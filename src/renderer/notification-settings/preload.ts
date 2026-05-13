@@ -8,5 +8,8 @@ contextBridge.exposeInMainWorld('onlycat', {
   getAutoStart: () => ipcRenderer.invoke('settings:get-auto-start'),
   setAutoStart: (enabled: boolean) => ipcRenderer.invoke('settings:set-auto-start', enabled),
   testNotification: () => ipcRenderer.invoke('settings:test-notification'),
+  getKnownRfids: () => ipcRenderer.invoke('settings:get-known-rfids'),
+  getIgnoredRfids: () => ipcRenderer.invoke('settings:get-ignored-rfids'),
+  setIgnoredRfids: (rfids: string[]) => ipcRenderer.invoke('settings:set-ignored-rfids', rfids),
   close: () => ipcRenderer.send('notification-settings:close'),
 });

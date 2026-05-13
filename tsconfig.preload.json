@@ -9,6 +9,7 @@
     "src/renderer/activity-window/preload.ts",
     "src/renderer/video-window/preload.ts",
     "src/renderer/notification-settings/preload.ts",
+    "src/renderer/telemetry-window/preload.ts",
     "src/shared/**/*"
   ],
   "exclude": [

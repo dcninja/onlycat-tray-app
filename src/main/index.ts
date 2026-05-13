@@ -9,6 +9,7 @@ import { checkForUpdates, openReleasePage } from './UpdateChecker';
 import { classificationLabel, triggerSourceLabel, formatSubevent } from '../shared/eventLabels';
 import { IPC_CHANNELS } from '../shared/ipcChannels';
 import type { AuthSubmitTokenPayload, EventsLoadMorePayload } from '../shared/ipcChannels';
+import { saveTelemetry, getTelemetry, getLatestTelemetry, pruneTelemetry } from './TelemetryDatabase';
 import type { Device, DeviceEvent, DeviceTransitPolicy, RfidLastSeen } from '../shared/types';
 import { saveEvents, loadAllEvents, getLatestGlobalId, getEventCount, setMeta, getMeta, toggleFavourite, loadFavourites, clearAllEvents } from './EventDatabase';
 
@@ -221,11 +222,50 @@ async function fetchRfidLastSeen(): Promise<void> {
       // skip
     }
   }
-  trayManager.setRfidLastSeen(rfidLastSeenMap, settingsStore.getRfidCache(), () => cachedEvents);
+  trayManager.setRfidLastSeen(rfidLastSeenMap, settingsStore.getRfidCache(), () => cachedEvents, settingsStore.ignoredRfids);
   // Update activity window with new RFID cache if open
   const activityWin = windowManager.getActivityWindow();
   if (activityWin) {
     activityWin.webContents.send(IPC_CHANNELS.KNOWN_RFIDS, settingsStore.getRfidCache());
+  }
+}
+
+// Telemetry polling
+let telemetryInterval: ReturnType<typeof setInterval> | null = null;
+const TELEMETRY_METRICS = ['wifi_rssi', 'vbat', 'vbus', 'tcpu', 'uptime', 'free_storage', 'vcc', 'ibat', 'tbat', 'free_heap'];
+
+async function fetchTelemetry(): Promise<void> {
+  for (const device of devices) {
+    try {
+      const result = await gatewayClient.request('getDeviceTelemetryMetrics', {
+        deviceId: device.deviceId,
+      }) as Array<{ time: string; measureName: string; value: number }>;
+
+      if (Array.isArray(result)) {
+        const points = result
+          .filter(r => TELEMETRY_METRICS.includes(r.measureName))
+          .map(r => ({
+            timestamp: r.time,
+            deviceId: device.deviceId,
+            measureName: r.measureName,
+            value: r.value,
+          }));
+        if (points.length > 0) {
+          await saveTelemetry(points);
+        }
+      }
+    } catch {
+      // skip
+    }
+  }
+  // Prune old data (keep 30 days)
+  await pruneTelemetry(30);
+
+  // Start hourly polling if not already running
+  if (!telemetryInterval) {
+    telemetryInterval = setInterval(() => {
+      fetchTelemetry().catch(console.error);
+    }, 60 * 60 * 1000); // every hour
   }
 }
 
@@ -292,6 +332,7 @@ app.on('ready', async () => {
       app.setLoginItemSettings({ openAtLogin: newVal });
       trayManager.setAutoStart(newVal);
     },
+    onTelemetryClick: () => windowManager.openTelemetryWindow(),
     onTestNotification: () => {},
   });
 
@@ -423,6 +464,8 @@ gatewayClient.on('connected', () => {
         // Fetch transit policies for each device
         await fetchTransitPolicies();
         await fetchRfidLastSeen();
+        // Fetch initial telemetry and start hourly polling
+        fetchTelemetry().catch(console.error);
         // Load cached events from DB for fast UI
         if (!eventsCached) {
           loadAllEvents().then(stored => {
@@ -601,7 +644,6 @@ gatewayClient.on('userEventUpdate', async (data: { type: string; body: DeviceEve
   try {
     if (data.type !== 'create') return;
     const ns = settingsStore.notificationSettings;
-    if (ns.videoOnly && data.body.posterFrameIndex == null) return;
 
     const event = normalizeEvent(data.body, devices);
     const deviceName = event.deviceName ?? event.deviceId;
@@ -628,7 +670,7 @@ gatewayClient.on('userEventUpdate', async (data: { type: string; body: DeviceEve
 
     // Apply classification filter
     const cls = enriched.eventClassification ?? 0;
-    const shouldNotify = ns.classifications.includes(cls);
+    const shouldNotify = ns.classifications.includes(cls) && !(ns.videoOnly && enriched.posterFrameIndex == null);
 
     let passedSummaryFilter = true;
     if (shouldNotify) {
@@ -665,6 +707,30 @@ gatewayClient.on('userEventUpdate', async (data: { type: string; body: DeviceEve
           refreshEventSummary(eid, evId);
         }, delay);
       }
+    }
+
+    // Update RFID last-seen in tray menu with this event's data
+    const rfidCodes = enriched.rfidCodes ?? enriched.subevents?.map(s => s.rfidCode).filter((c): c is string => !!c) ?? [];
+    if (rfidCodes.length > 0) {
+      const deviceEntries = rfidLastSeenMap.get(enriched.deviceId) ?? [];
+      for (const rfidCode of rfidCodes) {
+        const lastSub = enriched.subevents?.filter(s => s.rfidCode === rfidCode).pop() ?? null;
+        const existingIdx = deviceEntries.findIndex(e => e.rfidCode === rfidCode);
+        const entry: RfidLastSeen = {
+          deviceId: enriched.deviceId,
+          rfidCode,
+          eventId: enriched.eventId,
+          timestamp: enriched.createdAt ?? enriched.timestamp ?? null,
+          lastSubevent: lastSub,
+        };
+        if (existingIdx !== -1) {
+          deviceEntries[existingIdx] = entry;
+        } else {
+          deviceEntries.push(entry);
+        }
+      }
+      rfidLastSeenMap.set(enriched.deviceId, deviceEntries);
+      trayManager.setRfidLastSeen(rfidLastSeenMap, settingsStore.getRfidCache(), () => cachedEvents, settingsStore.ignoredRfids);
     }
   } catch (err) {
     console.error('userEventUpdate handler error:', err);
@@ -722,6 +788,27 @@ ipcMain.handle('settings:set-auto-start', (_e, enabled: boolean) => {
   trayManager.setAutoStart(enabled);
 });
 
+// Ignored RFIDs IPC
+ipcMain.handle('settings:get-known-rfids', () => {
+  // Merge RFID name cache with any RFIDs from last-seen that don't have names
+  const named = settingsStore.getRfidCache();
+  const all: Record<string, string> = { ...named };
+  for (const [, entries] of rfidLastSeenMap) {
+    for (const entry of entries) {
+      if (!all[entry.rfidCode]) {
+        all[entry.rfidCode] = ''; // empty string = no name known
+      }
+    }
+  }
+  return all;
+});
+ipcMain.handle('settings:get-ignored-rfids', () => settingsStore.ignoredRfids);
+ipcMain.handle('settings:set-ignored-rfids', (_e, rfids: string[]) => {
+  settingsStore.ignoredRfids = rfids;
+  // Rebuild tray menu to reflect the change
+  trayManager.setRfidLastSeen(rfidLastSeenMap, settingsStore.getRfidCache(), () => cachedEvents, settingsStore.ignoredRfids);
+});
+
 // Test notification IPC
 ipcMain.handle('settings:test-notification', async () => {
   try {
@@ -754,6 +841,26 @@ ipcMain.handle('settings:test-notification', async () => {
 // Copy URL to clipboard
 ipcMain.on('copy:url', (_event, payload: { url: string }) => {
   clipboard.writeText(payload.url);
+});
+
+// Telemetry IPC handlers
+ipcMain.handle('telemetry:get', async (_event, measureName: string, range: string) => {
+  if (devices.length === 0) return [];
+  const since = (() => {
+    const now = Date.now();
+    switch (range) {
+      case '24h': return new Date(now - 24 * 60 * 60 * 1000).toISOString();
+      case '7d': return new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString();
+      case '30d': return new Date(now - 30 * 24 * 60 * 60 * 1000).toISOString();
+      default: return new Date(now - 24 * 60 * 60 * 1000).toISOString();
+    }
+  })();
+  return getTelemetry(devices[0].deviceId, measureName, since);
+});
+
+ipcMain.handle('telemetry:get-latest', async () => {
+  if (devices.length === 0) return [];
+  return getLatestTelemetry(devices[0].deviceId);
 });
 
 // Export events to CSV
@@ -871,6 +978,31 @@ async function refreshEventSummary(deviceId: string, eventId: number): Promise<v
         }
         cachedEvents[idx] = { ...cachedEvents[idx], summary, subevents };
         saveEvents([cachedEvents[idx]]).catch(console.error);
+
+        // Update RFID last-seen in tray with refreshed subevent data
+        const rfidCodes = subevents.map(s => s.rfidCode).filter((c): c is string => !!c);
+        if (rfidCodes.length > 0) {
+          const deviceEntries = rfidLastSeenMap.get(deviceId) ?? [];
+          for (const rfidCode of rfidCodes) {
+            const lastSub = subevents.filter(s => s.rfidCode === rfidCode).pop() ?? null;
+            const existingIdx = deviceEntries.findIndex(e => e.rfidCode === rfidCode);
+            const entry: RfidLastSeen = {
+              deviceId,
+              rfidCode,
+              eventId,
+              timestamp: cached.createdAt ?? cached.timestamp ?? null,
+              lastSubevent: lastSub,
+            };
+            if (existingIdx !== -1) {
+              deviceEntries[existingIdx] = entry;
+            } else {
+              deviceEntries.push(entry);
+            }
+          }
+          rfidLastSeenMap.set(deviceId, deviceEntries);
+          trayManager.setRfidLastSeen(rfidLastSeenMap, settingsStore.getRfidCache(), () => cachedEvents, settingsStore.ignoredRfids);
+        }
+
         const activityWin = windowManager.getActivityWindow();
         if (activityWin) {
           cachedEvents.sort((a, b) => b.globalId - a.globalId);

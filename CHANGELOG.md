@@ -1,13 +1,31 @@
 # Changelog
 
-## [1.8.0] - 2026-05-13
+## [1.9.0] - 2026-05-13
 
 ### Added
+- **Device Health window** — dedicated telemetry dashboard accessible from the tray menu
+  - Time-series graphs for WiFi signal, battery voltage, USB voltage, CPU temperature, uptime, and free storage
+  - Hourly polling of `getDeviceTelemetryMetrics` API, stored in SQLite (30-day retention)
+  - Time range selector: 24h / 7 days / 30 days
+  - WiFi signal shown as percentage with dBm in brackets
+  - Uptime shown in days, storage in GB
 - **RFID Last Seen in tray menu** — each device shows its cats with last action and time (e.g. 🐱 Roxy 🢁 Out ✅ Transit — 3h ago)
-- **RFID pre-population on startup** — fetches all known RFID codes per device via `getLastSeenRfidCodesByDevice` and resolves cat names upfront
+  - Clickable — opens the video for that event
+  - Updates live as new events arrive and summaries refresh
+- **Ignored Cats** — new section in Settings to hide specific cats from the tray menu's last activity display
+  - Shows all known RFIDs (named and unnamed) with checkboxes
+  - Changes apply immediately without restart
+- **RFID pre-population on startup** — fetches all known RFID codes per device and resolves cat names upfront, improving Unknown Cats accuracy
 - **New app icon** — updated to blue OnlyCat icon
 
 ### Fixed
+- Events not appearing after Load More — cursor was using the absolute oldest cached event (from months ago) instead of the recent block
+- Duplicate events appearing after Load More — renderer now deduplicates all incoming events by globalId
+- Events disappearing when activity window reopened — `cachedEvents` now sorted by globalId before every send
+- Notifications and live events not arriving — `videoOnly` filter was blocking all events from being cached; now only affects notification delivery
+- Event subscription lost after reconnect — `getEvents` with `subscribe: true` now called on every reconnect
+- `userEventUpdate` handler wrapped in try/catch to prevent silent listener death on errors
+- Load More gap detection — initial fetch no longer stops early at cached overlap, fills gaps properly
 - Events not appearing after Load More — gap-filling logic no longer stops early when encountering cached events
 - Load More duplicating all events — renderer now deduplicates by globalId in all IPC handlers
 - Load More button greying out prematurely — cursor now calculated from recent events (last 14 days) instead of ancient cached ones

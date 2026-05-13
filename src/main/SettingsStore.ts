@@ -15,6 +15,7 @@ interface Settings {
   notifications: NotificationSettings;
   rfidCache: Record<string, string>;
   autoStart: boolean;
+  ignoredRfids: string[];
 }
 
 const DEFAULTS: Settings = {
@@ -28,6 +29,7 @@ const DEFAULTS: Settings = {
   },
   rfidCache: {},
   autoStart: false,
+  ignoredRfids: [],
 };
 
 class SettingsStore {
@@ -116,6 +118,16 @@ class SettingsStore {
   set autoStart(value: boolean) {
     const s = this.read();
     s.autoStart = value;
+    this.write(s);
+  }
+
+  get ignoredRfids(): string[] {
+    return this.read().ignoredRfids ?? [];
+  }
+
+  set ignoredRfids(value: string[]) {
+    const s = this.read();
+    s.ignoredRfids = value;
     this.write(s);
   }
 }

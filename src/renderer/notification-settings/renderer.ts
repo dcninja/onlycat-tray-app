@@ -75,6 +75,43 @@ autoStartCheck.addEventListener('change', () => {
   (window.onlycat as any).setAutoStart(autoStartCheck.checked);
 });
 
+// Ignored RFIDs
+const ignoredRfidsList = document.getElementById('ignored-rfids-list') as HTMLDivElement;
+
+async function loadIgnoredRfids(): Promise<void> {
+  const knownRfids: Record<string, string> = await (window.onlycat as any).getKnownRfids();
+  const ignoredRfids: string[] = await (window.onlycat as any).getIgnoredRfids();
+  const ignoredSet = new Set(ignoredRfids);
+
+  ignoredRfidsList.innerHTML = '';
+  const entries = Object.entries(knownRfids);
+  if (entries.length === 0) {
+    ignoredRfidsList.innerHTML = '<p style="color:#757575;font-size:0.8rem">No known cats yet.</p>';
+    return;
+  }
+
+  for (const [rfidCode, catName] of entries) {
+    const label = document.createElement('label');
+    label.className = 'toggle-label';
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = ignoredSet.has(rfidCode);
+    checkbox.dataset.rfid = rfidCode;
+    checkbox.addEventListener('change', () => {
+      const allChecked = Array.from(ignoredRfidsList.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'))
+        .filter(c => c.checked)
+        .map(c => c.dataset.rfid!)
+        .filter(Boolean);
+      (window.onlycat as any).setIgnoredRfids(allChecked);
+    });
+    label.appendChild(checkbox);
+    label.appendChild(document.createTextNode(` ${catName || rfidCode}`));
+    ignoredRfidsList.appendChild(label);
+  }
+}
+
+loadIgnoredRfids();
+
 // Test notification
 testNotificationBtn.addEventListener('click', async () => {
   testNotificationBtn.disabled = true;

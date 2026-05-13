@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'" />
+  <title>OnlyCat — Device Health</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <h1>📊 Device Health</h1>
+    <div class="time-range">
+      <button class="range-btn active" data-range="24h">24h</button>
+      <button class="range-btn" data-range="7d">7 days</button>
+      <button class="range-btn" data-range="30d">30 days</button>
+    </div>
+  </header>
+  <main>
+    <section class="metric-card">
+      <h2>WiFi Signal (RSSI)</h2>
+      <div class="metric-value" id="wifi-value">--</div>
+      <canvas id="wifi-chart" width="460" height="120"></canvas>
+    </section>
+    <section class="metric-card">
+      <h2>Battery Voltage</h2>
+      <div class="metric-value" id="vbat-value">--</div>
+      <canvas id="vbat-chart" width="460" height="120"></canvas>
+    </section>
+    <section class="metric-card">
+      <h2>USB Voltage</h2>
+      <div class="metric-value" id="vbus-value">--</div>
+      <canvas id="vbus-chart" width="460" height="120"></canvas>
+    </section>
+    <section class="metric-card">
+      <h2>CPU Temperature</h2>
+      <div class="metric-value" id="tcpu-value">--</div>
+      <canvas id="tcpu-chart" width="460" height="120"></canvas>
+    </section>
+    <section class="metric-card">
+      <h2>Uptime</h2>
+      <div class="metric-value" id="uptime-value">--</div>
+      <canvas id="uptime-chart" width="460" height="120"></canvas>
+    </section>
+    <section class="metric-card">
+      <h2>Free Storage</h2>
+      <div class="metric-value" id="storage-value">--</div>
+      <canvas id="storage-chart" width="460" height="120"></canvas>
+    </section>
+  </main>
+  <script type="module" src="renderer.js"></script>
+</body>
+</html>

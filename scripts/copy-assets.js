@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const renderers = ['token-dialog', 'activity-window', 'video-window', 'notification-settings'];
+const renderers = ['token-dialog', 'activity-window', 'video-window', 'notification-settings', 'telemetry-window'];
 const srcBase = path.join(__dirname, '../src/renderer');
 const distBase = path.join(__dirname, '../dist/renderer/renderer');
 

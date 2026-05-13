@@ -10,6 +10,7 @@ class WindowManager {
   private activityWindow: BrowserWindow | null = null;
   private videoWindow: BrowserWindow | null = null;
   private notificationSettingsWindow: BrowserWindow | null = null;
+  private telemetryWindow: BrowserWindow | null = null;
 
   openTokenDialog(): void {
     if (this.tokenDialog && !this.tokenDialog.isDestroyed()) {
@@ -86,7 +87,7 @@ class WindowManager {
 
     this.notificationSettingsWindow = new BrowserWindow({
       width: 380,
-      height: 800,
+      height: 900,
       resizable: false,
       title: 'OnlyCat — Notification Settings',
       autoHideMenuBar: true,
@@ -112,6 +113,35 @@ class WindowManager {
       this.notificationSettingsWindow.close();
       this.notificationSettingsWindow = null;
     }
+  }
+
+  openTelemetryWindow(): void {
+    if (this.telemetryWindow && !this.telemetryWindow.isDestroyed()) {
+      this.telemetryWindow.show();
+      this.telemetryWindow.focus();
+      return;
+    }
+
+    this.telemetryWindow = new BrowserWindow({
+      width: 520,
+      height: 800,
+      title: 'OnlyCat — Device Health',
+      autoHideMenuBar: true,
+      icon: APP_ICON,
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        preload: path.join(DIST_ROOT, 'dist/renderer/renderer/telemetry-window/preload.js'),
+      },
+    });
+
+    this.telemetryWindow.loadFile(
+      path.join(DIST_ROOT, 'dist/renderer/renderer/telemetry-window/index.html')
+    );
+
+    this.telemetryWindow.on('closed', () => {
+      this.telemetryWindow = null;
+    });
   }
 
   openVideoWindow(deviceId: string, eventId: number): void {

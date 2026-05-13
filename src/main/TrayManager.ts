@@ -26,6 +26,7 @@ class TrayManager {
   private onCheckUpdate: OnCheckUpdate = () => {};
   private onActivatePolicy: OnActivatePolicy = () => {};
   private onCheckNotificationSettings: OnCheckNotificationSettings = () => {};
+  private onTelemetryClick: () => void = () => {};
   private notifyOnVideoOnly: boolean = true;
   private updateAvailableVersion: string | null = null;
   private transitPolicies: Map<string, import('../shared/types').DeviceTransitPolicy[]> = new Map();
@@ -35,6 +36,7 @@ class TrayManager {
   private rfidLastSeen: Map<string, RfidLastSeen[]> = new Map();
   private rfidNameCache: Record<string, string> = {};
   private getCachedEvents: () => DeviceEvent[] = () => [];
+  private ignoredRfids: Set<string> = new Set();
 
   init(callbacks: {
     onActivityClick: OnActivityClick;
@@ -46,6 +48,7 @@ class TrayManager {
     onActivatePolicy: OnActivatePolicy;
     onCheckNotificationSettings: OnCheckNotificationSettings;
     onToggleAutoStart: () => void;
+    onTelemetryClick: () => void;
     notifyOnVideoOnly: boolean;
     autoStartEnabled: boolean;
   }): void {
@@ -58,6 +61,7 @@ class TrayManager {
     this.onActivatePolicy = callbacks.onActivatePolicy;
     this.onCheckNotificationSettings = callbacks.onCheckNotificationSettings;
     this.onToggleAutoStart = callbacks.onToggleAutoStart;
+    this.onTelemetryClick = callbacks.onTelemetryClick;
     this.notifyOnVideoOnly = callbacks.notifyOnVideoOnly;
     this.autoStartEnabled = callbacks.autoStartEnabled;
 
@@ -117,10 +121,11 @@ class TrayManager {
     this.rebuild();
   }
 
-  setRfidLastSeen(lastSeen: Map<string, RfidLastSeen[]>, rfidNames: Record<string, string>, getEvents: () => DeviceEvent[]): void {
+  setRfidLastSeen(lastSeen: Map<string, RfidLastSeen[]>, rfidNames: Record<string, string>, getEvents: () => DeviceEvent[], ignored?: string[]): void {
     this.rfidLastSeen = lastSeen;
     this.rfidNameCache = rfidNames;
     this.getCachedEvents = getEvents;
+    if (ignored) this.ignoredRfids = new Set(ignored);
     this.rebuild();
   }
 
@@ -162,8 +167,9 @@ class TrayManager {
           template.push({ label, enabled: false });
         }
 
-        // Show last-seen cats for this device
-        const lastSeenEntries = this.rfidLastSeen.get(device.deviceId) ?? [];
+        // Show last-seen cats for this device (excluding ignored)
+        const lastSeenEntries = (this.rfidLastSeen.get(device.deviceId) ?? [])
+          .filter(entry => !this.ignoredRfids.has(entry.rfidCode));
         for (const entry of lastSeenEntries) {
           const catName = this.rfidNameCache[entry.rfidCode] ?? entry.rfidCode;
           // Try to get subevent detail from cached events
@@ -186,9 +192,11 @@ class TrayManager {
           }
           const ts = entry.timestamp ?? entry.eventTimestamp;
           const time = ts ? this.timeAgo(new Date(ts)) : '';
+          const eventDeviceId = entry.deviceId;
+          const eventId = entry.eventId;
           template.push({
             label: `   🐱 ${catName}${summary ? ' ' + summary : ''}${time ? ' — ' + time : ''}`,
-            enabled: false,
+            click: () => this.onUnacknowledgedClick({ globalId: 0, eventId: eventId, deviceId: eventDeviceId } as DeviceEvent),
           });
         }
       }
@@ -196,6 +204,7 @@ class TrayManager {
 
     template.push({ type: 'separator' });
     template.push({ label: 'View Recent Activity', click: () => this.onActivityClick() });
+    template.push({ label: 'Device Health', click: () => this.onTelemetryClick() });
 
     // Door Policy section
     if (this.transitPolicies.size > 0) {
