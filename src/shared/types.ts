@@ -57,3 +57,19 @@ export interface LiveUpdate<T> {
 }
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting';
+
+export interface RfidLastSeen {
+  deviceId: string;
+  rfidCode: string;
+  eventId: number;
+  timestamp: string | null;
+  eventTimestamp?: string | null;
+  lastSubevent?: {
+    startFrameIndex: number;
+    endFrameIndex: number;
+    rfidCode: string | null;
+    direction: string;
+    action: string;
+  } | null;
+  updatedAt?: string;
+}

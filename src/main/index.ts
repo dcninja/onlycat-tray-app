@@ -9,7 +9,7 @@ import { checkForUpdates, openReleasePage } from './UpdateChecker';
 import { classificationLabel, triggerSourceLabel, formatSubevent } from '../shared/eventLabels';
 import { IPC_CHANNELS } from '../shared/ipcChannels';
 import type { AuthSubmitTokenPayload, EventsLoadMorePayload } from '../shared/ipcChannels';
-import type { Device, DeviceEvent, DeviceTransitPolicy } from '../shared/types';
+import type { Device, DeviceEvent, DeviceTransitPolicy, RfidLastSeen } from '../shared/types';
 import { saveEvents, loadAllEvents, getLatestGlobalId, getEventCount, setMeta, getMeta, toggleFavourite, loadFavourites, clearAllEvents } from './EventDatabase';
 
 // Set app name before ready so OS notifications show "OnlyCat" not "Electron"
@@ -24,6 +24,7 @@ const GATEWAY_URL = 'https://gateway.onlycat.com';
 
 let devices: Device[] = [];
 let transitPolicies: Map<string, DeviceTransitPolicy[]> = new Map(); // deviceId -> policies
+let rfidLastSeenMap: Map<string, RfidLastSeen[]> = new Map(); // deviceId -> last seen entries
 let cachedEvents: DeviceEvent[] = [];
 let eventsCached = false;
 let disconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -194,6 +195,40 @@ async function fetchTransitPolicies(): Promise<void> {
   trayManager.setTransitPolicies(transitPolicies, devices);
 }
 
+async function fetchRfidLastSeen(): Promise<void> {
+  for (const device of devices) {
+    try {
+      const lastSeen = await gatewayClient.request('getLastSeenRfidCodesByDevice', {
+        deviceId: device.deviceId,
+      }) as RfidLastSeen[];
+      rfidLastSeenMap.set(device.deviceId, lastSeen);
+
+      // Pre-populate RFID → cat name cache from last seen data
+      for (const entry of lastSeen) {
+        if (!settingsStore.getCatName(entry.rfidCode)) {
+          try {
+            const profile = await gatewayClient.request('getRfidProfile', {
+              rfidCode: entry.rfidCode,
+              deviceId: device.deviceId,
+            }) as { label?: string };
+            if (profile?.label) {
+              settingsStore.setCatName(entry.rfidCode, profile.label);
+            }
+          } catch { /* skip */ }
+        }
+      }
+    } catch {
+      // skip
+    }
+  }
+  trayManager.setRfidLastSeen(rfidLastSeenMap, settingsStore.getRfidCache(), () => cachedEvents);
+  // Update activity window with new RFID cache if open
+  const activityWin = windowManager.getActivityWindow();
+  if (activityWin) {
+    activityWin.webContents.send(IPC_CHANNELS.KNOWN_RFIDS, settingsStore.getRfidCache());
+  }
+}
+
 async function fetchAndSendEvent(deviceId: string, eventId: number): Promise<void> {
   await new Promise(r => setTimeout(r, 500));
   const videoWin = windowManager.getVideoWindow();
@@ -310,6 +345,7 @@ ipcMain.on(IPC_CHANNELS.AUTH_SUBMIT_TOKEN, (_event, payload: AuthSubmitTokenPayl
         devices = detailed;
         trayManager.setDevices(devices);
         fetchTransitPolicies().catch(console.error);
+        fetchRfidLastSeen().catch(console.error);
       })
       .catch((err) => console.error('getDevices failed', err));
   };
@@ -371,6 +407,7 @@ gatewayClient.on('connected', () => {
   if (disconnectTimer) { clearTimeout(disconnectTimer); disconnectTimer = null; }
   trayManager.setConnectionState('connected');
   if (tokenStore.load()) {
+    // Re-subscribe to devices
     gatewayClient.request('getDevices', { subscribe: true })
       .then(async (result) => {
         const list = result as Device[];
@@ -385,6 +422,7 @@ gatewayClient.on('connected', () => {
         trayManager.setDevices(devices);
         // Fetch transit policies for each device
         await fetchTransitPolicies();
+        await fetchRfidLastSeen();
         // Load cached events from DB for fast UI
         if (!eventsCached) {
           loadAllEvents().then(stored => {
@@ -397,6 +435,11 @@ gatewayClient.on('connected', () => {
         }
       })
       .catch((err) => console.error('getDevices (reconnect) failed', err));
+
+    // Re-subscribe to events — ensures live updates continue after reconnect
+    gatewayClient.request('getEvents', { subscribe: true })
+      .then(() => console.log('Re-subscribed to events'))
+      .catch((err) => console.error('getEvents re-subscribe failed', err));
   }
 });
 
@@ -424,6 +467,8 @@ ipcMain.on(IPC_CHANNELS.EVENTS_LOAD_MORE, async (_event, payload: EventsLoadMore
 
   // On initial load, send cached events immediately for instant UI
   if (isInitialLoad && cachedEvents.length > 0) {
+    // Sort by globalId descending to ensure newest events are first
+    cachedEvents.sort((a, b) => b.globalId - a.globalId);
     activityWin.webContents.send(IPC_CHANNELS.EVENTS_LIST, cachedEvents);
     activityWin.webContents.send(IPC_CHANNELS.KNOWN_RFIDS, settingsStore.getRfidCache());
   }
@@ -479,11 +524,11 @@ ipcMain.on(IPC_CHANNELS.EVENTS_LOAD_MORE, async (_event, payload: EventsLoadMore
       allFetched.push(...enriched);
       cursor = page[page.length - 1].globalId;
 
-      // On initial load, keep fetching until we have 3 days of data
+      // On initial load, keep fetching until we have 1 day of data
       if (isInitialLoad) {
-        // If we have a cache, stop when we reach events we already have
+        // If we have a cache and the page overlaps, backfill summaries but keep going
+        // to fill any gaps in the cache
         if (newestCachedId && page.some(e => e.globalId <= newestCachedId)) {
-          // Before filtering, backfill summaries for cached events that were missing them
           for (const fetched of allFetched) {
             if (!fetched.summary) continue;
             const idx = cachedEvents.findIndex(c => c.globalId === fetched.globalId);
@@ -492,11 +537,6 @@ ipcMain.on(IPC_CHANNELS.EVENTS_LOAD_MORE, async (_event, payload: EventsLoadMore
               summariesBackfilled = true;
             }
           }
-          // Filter out events we already have
-          const newOnly = allFetched.filter(e => !cachedEvents.some(c => c.globalId === e.globalId));
-          allFetched.length = 0;
-          allFetched.push(...newOnly);
-          break;
         }
         const oldestTimestamp = enriched[enriched.length - 1]?.createdAt ?? enriched[enriched.length - 1]?.timestamp;
         if (oldestTimestamp && oldestTimestamp < oneDayAgo) break;
@@ -506,6 +546,9 @@ ipcMain.on(IPC_CHANNELS.EVENTS_LOAD_MORE, async (_event, payload: EventsLoadMore
         break; // Load More just fetches one page
       }
     }
+
+    // Filter out events we already have in cache
+    // (handled below in the dedup section)
 
     // Cache to SQLite
     if (allFetched.length) saveEvents(allFetched).catch(console.error);
@@ -540,7 +583,9 @@ ipcMain.on(IPC_CHANNELS.EVENTS_LOAD_MORE, async (_event, payload: EventsLoadMore
     }
     // If we had cache and no new events, do nothing — cached events already shown
     // But if summaries were updated on existing events, re-send the full list so the renderer picks them up
+    // If summaries were updated on existing events during initial load, re-send the full list
     if ((summariesUpdated || summariesBackfilled) && isInitialLoad) {
+      cachedEvents.sort((a, b) => b.globalId - a.globalId);
       activityWin.webContents.send(IPC_CHANNELS.EVENTS_LIST, cachedEvents);
       // Persist updated summaries to SQLite
       const updatedEvents = cachedEvents.filter(e => e.summary);
@@ -553,73 +598,76 @@ ipcMain.on(IPC_CHANNELS.EVENTS_LOAD_MORE, async (_event, payload: EventsLoadMore
 });
 
 gatewayClient.on('userEventUpdate', async (data: { type: string; body: DeviceEvent }) => {
-  if (data.type !== 'create') return;
-  const ns = settingsStore.notificationSettings;
-  if (ns.videoOnly && data.body.posterFrameIndex == null) return;
+  try {
+    if (data.type !== 'create') return;
+    const ns = settingsStore.notificationSettings;
+    if (ns.videoOnly && data.body.posterFrameIndex == null) return;
 
-  const event = normalizeEvent(data.body, devices);
-  const deviceName = event.deviceName ?? event.deviceId;
-  const catName = await getCatName(event);
+    const event = normalizeEvent(data.body, devices);
+    const deviceName = event.deviceName ?? event.deviceId;
+    const catName = await getCatName(event);
 
-  // Fetch event summary for direction/action
-  let enrichedEvent = catName ? { ...event, catName } : event;
-  if (event.accessToken) {
-    try {
-      const result = await gatewayClient.request('getEventSummary', {
-        deviceId: event.deviceId,
-        eventId: event.eventId,
-        accessToken: event.accessToken,
-        subscribe: true,
-      }) as { subevents?: Array<{ startFrameIndex: number; endFrameIndex: number; direction: string; action: string; rfidCode: string | null }> } | null;
-      if (result?.subevents?.length) {
-        const parts = result.subevents.map(s => formatSubevent(s.direction, s.action));
-        enrichedEvent = { ...enrichedEvent, summary: parts[parts.length - 1], subevents: result.subevents };
+    // Fetch event summary for direction/action
+    let enrichedEvent = catName ? { ...event, catName } : event;
+    if (event.accessToken) {
+      try {
+        const result = await gatewayClient.request('getEventSummary', {
+          deviceId: event.deviceId,
+          eventId: event.eventId,
+          accessToken: event.accessToken,
+          subscribe: true,
+        }) as { subevents?: Array<{ startFrameIndex: number; endFrameIndex: number; direction: string; action: string; rfidCode: string | null }> } | null;
+        if (result?.subevents?.length) {
+          const parts = result.subevents.map(s => formatSubevent(s.direction, s.action));
+          enrichedEvent = { ...enrichedEvent, summary: parts[parts.length - 1], subevents: result.subevents };
+        }
+      } catch { /* skip */ }
+    }
+
+    const enriched = enrichedEvent;
+
+    // Apply classification filter
+    const cls = enriched.eventClassification ?? 0;
+    const shouldNotify = ns.classifications.includes(cls);
+
+    let passedSummaryFilter = true;
+    if (shouldNotify) {
+      // Apply summary filters
+      const lastSub = enriched.subevents?.[enriched.subevents.length - 1];
+      if (lastSub) {
+        if (ns.directions.length < 2 && !ns.directions.includes(lastSub.direction)) passedSummaryFilter = false;
+        if (ns.actions.length < 3 && !ns.actions.includes(lastSub.action)) passedSummaryFilter = false;
+      } else if (!ns.showNoSummary) {
+        passedSummaryFilter = false;
       }
-    } catch { /* skip */ }
-  }
-
-  const enriched = enrichedEvent;
-
-  // Apply classification filter
-  const cls = enriched.eventClassification ?? 0;
-  const shouldNotify = ns.classifications.includes(cls);
-
-  let passedSummaryFilter = true;
-  if (shouldNotify) {
-    // Apply summary filters
-    const lastSub = enriched.subevents?.[enriched.subevents.length - 1];
-    if (lastSub) {
-      if (ns.directions.length < 2 && !ns.directions.includes(lastSub.direction)) passedSummaryFilter = false;
-      if (ns.actions.length < 3 && !ns.actions.includes(lastSub.action)) passedSummaryFilter = false;
-    } else if (!ns.showNoSummary) {
-      passedSummaryFilter = false;
     }
-  }
 
-  cacheEvent(enriched);
-  trayManager.setLastEvent(enriched);
+    cacheEvent(enriched);
+    trayManager.setLastEvent(enriched);
 
-  if (shouldNotify && passedSummaryFilter) {
-    trayManager.setUnacknowledgedEvent(enriched);
-    notificationManager.notify(enriched, deviceName, catName);
-  }
-
-  const activityWin = windowManager.getActivityWindow();
-  if (activityWin) {
-    activityWin.webContents.send(IPC_CHANNELS.EVENTS_PREPEND, enriched);
-    activityWin.webContents.send(IPC_CHANNELS.KNOWN_RFIDS, settingsStore.getRfidCache());
-  }
-
-  // Schedule summary re-fetches after the event has had time to finish processing
-  // Re-fetch at 15s, 30s, and 60s to catch events that take longer to process
-  if (enriched.accessToken) {
-    const eid = enriched.deviceId;
-    const evId = enriched.eventId;
-    for (const delay of [15000, 30000, 60000]) {
-      setTimeout(() => {
-        refreshEventSummary(eid, evId);
-      }, delay);
+    if (shouldNotify && passedSummaryFilter) {
+      trayManager.setUnacknowledgedEvent(enriched);
+      notificationManager.notify(enriched, deviceName, catName);
     }
+
+    const activityWin = windowManager.getActivityWindow();
+    if (activityWin) {
+      activityWin.webContents.send(IPC_CHANNELS.EVENTS_PREPEND, enriched);
+      activityWin.webContents.send(IPC_CHANNELS.KNOWN_RFIDS, settingsStore.getRfidCache());
+    }
+
+    // Schedule summary re-fetches after the event has had time to finish processing
+    if (enriched.accessToken) {
+      const eid = enriched.deviceId;
+      const evId = enriched.eventId;
+      for (const delay of [15000, 30000, 60000]) {
+        setTimeout(() => {
+          refreshEventSummary(eid, evId);
+        }, delay);
+      }
+    }
+  } catch (err) {
+    console.error('userEventUpdate handler error:', err);
   }
 });
 
@@ -825,6 +873,7 @@ async function refreshEventSummary(deviceId: string, eventId: number): Promise<v
         saveEvents([cachedEvents[idx]]).catch(console.error);
         const activityWin = windowManager.getActivityWindow();
         if (activityWin) {
+          cachedEvents.sort((a, b) => b.globalId - a.globalId);
           activityWin.webContents.send(IPC_CHANNELS.EVENTS_LIST, cachedEvents);
         }
       }

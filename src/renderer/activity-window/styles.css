@@ -16,6 +16,14 @@ header {
 
 h1 { font-size: 1.1rem; font-weight: 600; margin-bottom: 12px; }
 
+.header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.header-row h1 { margin-bottom: 0; }
+
 .tabs {
   display: flex;
   gap: 4px;
@@ -69,6 +77,23 @@ h1 { font-size: 1.1rem; font-weight: 600; margin-bottom: 12px; }
 
 #export-btn:hover { background: #2a2a3e; color: #e0e0e0; }
 #export-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+#load-more-btn {
+  flex-shrink: 0;
+  padding: 7px 14px;
+  border-radius: 6px;
+  border: 2px solid #5c6bc0;
+  background: transparent;
+  color: #5c6bc0;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+#load-more-btn:hover { background: #5c6bc020; color: #7986cb; }
+#load-more-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 .filters {
   display: flex;
@@ -198,21 +223,5 @@ main {
 .badge-blue   { background: #0d47a180; color: #82b1ff; }
 .badge-red    { background: #b71c1c80; color: #ff8a80; }
 .badge-grey   { background: #37474f80; color: #b0bec5; }
-
-#load-more-container { display: flex; justify-content: center; padding: 8px 0; }
-
-#load-more-btn {
-  padding: 8px 24px;
-  border-radius: 6px;
-  border: 1px solid #5c6bc0;
-  background: transparent;
-  color: #5c6bc0;
-  cursor: pointer;
-  font-size: 0.85rem;
-  transition: background 0.15s;
-}
-
-#load-more-btn:hover { background: #5c6bc020; }
-#load-more-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
 #empty-msg { text-align: center; color: #757575; padding: 32px 0; }

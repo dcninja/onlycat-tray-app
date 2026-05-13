@@ -9,7 +9,10 @@
 </head>
 <body>
   <header>
-    <h1>Recent Activity</h1>
+    <div class="header-row">
+      <h1>Recent Activity</h1>
+      <button id="load-more-btn" title="Load older events">Load More</button>
+    </div>
     <div class="tabs">
       <button class="tab active" data-tab="video">Video Movement Events</button>
       <button class="tab" data-tab="all">All Events</button>
@@ -54,9 +57,6 @@
   </header>
   <main>
     <ul id="event-list"></ul>
-    <div id="load-more-container">
-      <button id="load-more-btn">Load More</button>
-    </div>
     <p id="empty-msg" hidden>No events yet.</p>
   </main>
   <script type="module" src="renderer.js"></script>

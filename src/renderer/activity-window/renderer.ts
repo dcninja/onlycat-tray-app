@@ -220,19 +220,28 @@ window.onlycat.onKnownRfids!((cache: Record<string, string>) => {
 
 // IPC listeners
 window.onlycat.onEventsList!((events: DeviceEvent[]) => {
-  allEvents = events;
+  // Merge: keep any events from Load More that aren't in the new list
+  const incomingIds = new Set(events.map(e => e.globalId));
+  const keepFromExisting = allEvents.filter(e => !incomingIds.has(e.globalId));
+  allEvents = [...events, ...keepFromExisting].sort((a, b) => b.globalId - a.globalId);
   renderList();
   loadMoreBtn.disabled = events.length === 0;
-  loadMoreBtn.hidden = false;
 });
 
 window.onlycat.onEventsLoadMoreResult!((events: DeviceEvent[]) => {
-  allEvents = [...allEvents, ...events];
+  // Dedup: only add events not already in the list
+  const existingIds = new Set(allEvents.map(e => e.globalId));
+  const newEvents = events.filter(e => !existingIds.has(e.globalId));
+  allEvents = [...allEvents, ...newEvents];
+  // Sort so newly loaded events appear in the correct chronological position
+  allEvents.sort((a, b) => b.globalId - a.globalId);
   renderList();
   loadMoreBtn.disabled = events.length === 0;
 });
 
 window.onlycat.onEventPrepend!((event: DeviceEvent) => {
+  // Dedup: skip if already in list
+  if (allEvents.some(e => e.globalId === event.globalId)) return;
   allEvents = [event, ...allEvents];
   // Fast path: if the new event passes filters, prepend to DOM instead of full re-render
   const visible = visibleEvents();
@@ -246,10 +255,18 @@ window.onlycat.onEventPrepend!((event: DeviceEvent) => {
   }
 });
 
-// Load more — use smallest globalId as cursor
+// Load more — paginate from the bottom of recent events, not ancient cached ones
 loadMoreBtn.addEventListener('click', () => {
   if (allEvents.length === 0) return;
-  const minGlobalId = Math.min(...allEvents.map((e) => e.globalId));
+  // Find the smallest globalId among events from the last 14 days
+  // This avoids using ancient cached events as the cursor
+  const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+  const recentEvents = allEvents.filter(e => {
+    const ts = e.createdAt ?? e.timestamp ?? '';
+    return ts >= twoWeeksAgo;
+  });
+  const targetEvents = recentEvents.length > 0 ? recentEvents : allEvents;
+  const minGlobalId = Math.min(...targetEvents.map(e => e.globalId));
   loadMoreBtn.disabled = true;
   window.onlycat.loadMore!(minGlobalId);
 });

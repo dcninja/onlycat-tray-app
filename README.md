@@ -26,6 +26,7 @@ A cross-platform desktop system tray application for [OnlyCat](https://onlycat.c
 - **SQLite event database** — events cached locally between sessions; only new events fetched on subsequent startups
 - **System tray icon** — runs silently in the background with a badge showing missed events
 - **Tray tooltip** — hover the tray icon to see the last event with cat name, summary, and relative time (Windows/macOS)
+- **Cat last-seen in tray menu** — each device shows its cats with their last action and relative time
 - **Real-time notifications** — desktop notification when your cat is detected, with cat name, time, and event classification (Entry Allowed, Contraband Detected)
 - **Recent Activity window** — browse your full event history with thumbnails, cat names, and timestamps
   - Four tabs: Video Movement Events / All Events / Unknown Cats / Favourites

@@ -1,7 +1,7 @@
 import { Tray, Menu, nativeImage, MenuItemConstructorOptions } from 'electron';
 import * as path from 'path';
-import * as fs from 'fs';
-import type { Device, DeviceEvent, ConnectionState } from '../shared/types';
+import type { Device, DeviceEvent, ConnectionState, RfidLastSeen } from '../shared/types';
+import { formatSubevent } from '../shared/eventLabels';
 
 type OnActivityClick = () => void;
 type OnSignOutClick = () => void;
@@ -32,6 +32,9 @@ class TrayManager {
   private lastEvent: DeviceEvent | null = null;
   private autoStartEnabled: boolean = false;
   private onToggleAutoStart: () => void = () => {};
+  private rfidLastSeen: Map<string, RfidLastSeen[]> = new Map();
+  private rfidNameCache: Record<string, string> = {};
+  private getCachedEvents: () => DeviceEvent[] = () => [];
 
   init(callbacks: {
     onActivityClick: OnActivityClick;
@@ -114,6 +117,13 @@ class TrayManager {
     this.rebuild();
   }
 
+  setRfidLastSeen(lastSeen: Map<string, RfidLastSeen[]>, rfidNames: Record<string, string>, getEvents: () => DeviceEvent[]): void {
+    this.rfidLastSeen = lastSeen;
+    this.rfidNameCache = rfidNames;
+    this.getCachedEvents = getEvents;
+    this.rebuild();
+  }
+
   buildMenuTemplate(): MenuItemConstructorOptions[] {
     const template: MenuItemConstructorOptions[] = [];
 
@@ -150,6 +160,36 @@ class TrayManager {
           const since = new Date(device.connectivity.timestamp).toLocaleString();
           const label = connected ? `   Online since ${since}` : `   Offline since ${since}`;
           template.push({ label, enabled: false });
+        }
+
+        // Show last-seen cats for this device
+        const lastSeenEntries = this.rfidLastSeen.get(device.deviceId) ?? [];
+        for (const entry of lastSeenEntries) {
+          const catName = this.rfidNameCache[entry.rfidCode] ?? entry.rfidCode;
+          // Try to get subevent detail from cached events
+          let summary = '';
+          if (entry.lastSubevent) {
+            summary = formatSubevent(entry.lastSubevent.direction, entry.lastSubevent.action);
+          } else {
+            // Look up the event in our cache and find the subevent for this RFID
+            const cachedEvent = this.getCachedEvents().find(
+              e => e.deviceId === entry.deviceId && e.eventId === entry.eventId
+            );
+            if (cachedEvent?.subevents?.length) {
+              // Find the last subevent matching this RFID code
+              const matching = cachedEvent.subevents.filter(s => s.rfidCode === entry.rfidCode);
+              const lastSub = matching.length > 0 ? matching[matching.length - 1] : cachedEvent.subevents[cachedEvent.subevents.length - 1];
+              if (lastSub) {
+                summary = formatSubevent(lastSub.direction, lastSub.action);
+              }
+            }
+          }
+          const ts = entry.timestamp ?? entry.eventTimestamp;
+          const time = ts ? this.timeAgo(new Date(ts)) : '';
+          template.push({
+            label: `   🐱 ${catName}${summary ? ' ' + summary : ''}${time ? ' — ' + time : ''}`,
+            enabled: false,
+          });
         }
       }
     }

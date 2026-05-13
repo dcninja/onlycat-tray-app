@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.8.0] - 2026-05-13
+
+### Added
+- **RFID Last Seen in tray menu** — each device shows its cats with last action and time (e.g. 🐱 Roxy 🢁 Out ✅ Transit — 3h ago)
+- **RFID pre-population on startup** — fetches all known RFID codes per device via `getLastSeenRfidCodesByDevice` and resolves cat names upfront
+- **New app icon** — updated to blue OnlyCat icon
+
+### Fixed
+- Events not appearing after Load More — gap-filling logic no longer stops early when encountering cached events
+- Load More duplicating all events — renderer now deduplicates by globalId in all IPC handlers
+- Load More button greying out prematurely — cursor now calculated from recent events (last 14 days) instead of ancient cached ones
+- Loaded events appearing at bottom of list — Load More results now sorted into correct chronological position immediately
+- Event subscriptions lost after silent reconnect — `getEvents` with `subscribe: true` now re-emitted on every reconnect
+- Unhandled errors in `userEventUpdate` handler could silently kill the listener — now wrapped in try/catch
+
+### Changed
+- Load More button moved to header (next to "Recent Activity" title) — bold text, thicker border, always visible
+- Settings window: "Notifications" section has a larger heading, "Video" sub-heading added for clarity
+- Settings window height increased to 800px
+
 ## [1.7.0] - 2026-04-23
 
 ### Added
